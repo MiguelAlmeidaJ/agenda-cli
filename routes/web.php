@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Core\Router;
 use App\Http\Controllers\AgendaController;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\AppearanceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingSettingsController;
@@ -13,7 +14,9 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PanelController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\ServiceMediaController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\WaitlistController;
 
@@ -32,6 +35,9 @@ $router->post('/cadastro', [AuthController::class, 'storeRegistration']);
 $router->post('/logout', [AuthController::class, 'logout']);
 
 $router->get('/painel', [PanelController::class, 'index']);
+$router->get('/painel/perfil', [ProfileController::class, 'index']);
+$router->post('/painel/perfil/foto', [ProfileController::class, 'uploadAvatar']);
+$router->post('/painel/perfil/foto/remover', [ProfileController::class, 'deleteAvatar']);
 $router->get('/painel/agenda', [AgendaController::class, 'index']);
 $router->get('/painel/indicadores', [ManagementController::class, 'index']);
 $router->get('/painel/lista-espera', [WaitlistController::class, 'index']);
@@ -50,6 +56,14 @@ $router->post('/painel/clientes/{id}', [CustomerController::class, 'update']);
 $router->get('/painel/servicos', [PanelController::class, 'services']);
 $router->post('/painel/servicos', [PanelController::class, 'storeService']);
 $router->post('/painel/servicos/{id}', [PanelController::class, 'updateService']);
+$router->post('/painel/servicos/{id}/imagem', [ServiceMediaController::class, 'upload']);
+$router->post('/painel/servicos/{id}/imagem/remover', [ServiceMediaController::class, 'delete']);
+
+$router->get('/painel/aparencia', [AppearanceController::class, 'index']);
+$router->post('/painel/aparencia/logo', [AppearanceController::class, 'uploadLogo']);
+$router->post('/painel/aparencia/logo/remover', [AppearanceController::class, 'deleteLogo']);
+$router->post('/painel/aparencia/capa', [AppearanceController::class, 'uploadCover']);
+$router->post('/painel/aparencia/capa/remover', [AppearanceController::class, 'deleteCover']);
 
 $router->get('/painel/equipe', [TeamController::class, 'index']);
 $router->post('/painel/equipe', [TeamController::class, 'store']);
