@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Core\Csrf;
 use App\Core\Database;
 use App\Services\AvailabilityService;
+use App\Services\CustomerService;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -25,15 +26,31 @@ final class BookingController
 
         $serviceId = (int) ($_GET['service_id'] ?? 0);
         $employeeId = (int) ($_GET['employee_id'] ?? 0);
-        $date = (string) ($_GET['date'] ?? '');
+        $date = trim((string) ($_GET['date'] ?? ''));
 
-        if ($establishmentId === 0 || $serviceId === 0 || $employeeId === 0 || $date === '') {
+        if ($establishmentId === 0 || $serviceId === 0 || $date === '') {
             http_response_code(422);
             echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
             return;
         }
 
-        $slots = (new AvailabilityService())->slots($establishmentId, $serviceId, $employeeId, $date);
+        $availability = new AvailabilityService();
+        if ($employeeId === 0) {
+            $slots = $availability->slotsForAnyProvider($establishmentId, $serviceId, $date);
+        } else {
+            $nameStmt = $pdo->prepare('SELECT name FROM users WHERE id = :provider LIMIT 1');
+            $nameStmt->execute(['provider' => $employeeId]);
+            $providerName = (string) ($nameStmt->fetchColumn() ?: 'Profissional');
+            $slots = array_map(
+                static fn (string $time): array => [
+                    'time' => $time,
+                    'employee_id' => $employeeId,
+                    'employee_name' => $providerName,
+                ],
+                $availability->slots($establishmentId, $serviceId, $employeeId, $date)
+            );
+        }
+
         echo json_encode(['slots' => $slots], JSON_UNESCAPED_UNICODE);
     }
 
@@ -60,8 +77,6 @@ final class BookingController
 
         $pdo->beginTransaction();
         try {
-            // O lock é feito no usuário prestador, então reservas concorrentes para serviços
-            // diferentes do mesmo profissional também são serializadas.
             $lock = $pdo->prepare('SELECT id FROM users WHERE id = :provider AND status = "active" FOR UPDATE');
             $lock->execute(['provider' => $employeeId]);
             if (!$lock->fetchColumn()) {
@@ -99,20 +114,22 @@ final class BookingController
                 throw new \RuntimeException('Serviço indisponível.');
             }
 
+            $customerId = (new CustomerService())->ensureForUser($pdo, (int) $establishment['id'], (int) Auth::id());
             $timezone = new DateTimeZone((string) $establishment['timezone']);
             $startsAt = new DateTimeImmutable($date . ' ' . $time . ':00', $timezone);
             $endsAt = $startsAt->add(new DateInterval('PT' . (int) $service['duration_minutes'] . 'M'));
 
             $insert = $pdo->prepare(
                 'INSERT INTO appointments '
-                . '(establishment_id, service_id, employee_user_id, client_user_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
-                . 'VALUES (:establishment, :service, :employee, :client, :creator, :starts, :ends, "confirmed", :price, :notes)'
+                . '(establishment_id, service_id, employee_user_id, client_user_id, customer_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
+                . 'VALUES (:establishment, :service, :employee, :client, :customer, :creator, :starts, :ends, "confirmed", :price, :notes)'
             );
             $insert->execute([
                 'establishment' => $establishment['id'],
                 'service' => $serviceId,
                 'employee' => $employeeId,
                 'client' => Auth::id(),
+                'customer' => $customerId,
                 'creator' => Auth::id(),
                 'starts' => $startsAt->format('Y-m-d H:i:s'),
                 'ends' => $endsAt->format('Y-m-d H:i:s'),
