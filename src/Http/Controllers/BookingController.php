@@ -84,8 +84,7 @@ final class BookingController
             }
 
             $provider = $pdo->prepare(
-                'SELECT 1 FROM employee_services es '
-                . 'JOIN services s ON s.id = es.service_id '
+                'SELECT 1 FROM employee_services es JOIN services s ON s.id = es.service_id '
                 . 'JOIN establishments e ON e.id = s.establishment_id '
                 . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = es.employee_user_id '
                 . 'WHERE e.id = :establishment AND s.id = :service AND es.employee_user_id = :provider '
@@ -153,11 +152,61 @@ final class BookingController
             flash('success', 'Agendamento confirmado com sucesso.');
             redirect('/painel');
         } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            if ($pdo->inTransaction()) $pdo->rollBack();
             flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível concluir o agendamento.');
             redirect('/estabelecimentos/' . $slug);
         }
+    }
+
+    public function cancel(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $appointmentId = (int) $id;
+        $pdo = Database::connection();
+
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT a.id, a.establishment_id, a.starts_at, a.status, e.timezone, '
+                . 'COALESCE(bs.cancellation_notice_minutes, 0) AS cancellation_notice_minutes '
+                . 'FROM appointments a JOIN establishments e ON e.id = a.establishment_id '
+                . 'LEFT JOIN booking_settings bs ON bs.establishment_id = a.establishment_id '
+                . 'WHERE a.id = :id AND a.client_user_id = :client LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+            $appointment = $stmt->fetch();
+            if (!$appointment) throw new \RuntimeException('Agendamento não encontrado.');
+            if (!in_array($appointment['status'], ['pending', 'confirmed'], true)) {
+                throw new \RuntimeException('Este agendamento não pode mais ser cancelado.');
+            }
+
+            $timezone = new DateTimeZone((string) $appointment['timezone']);
+            $startsAt = new DateTimeImmutable((string) $appointment['starts_at'], $timezone);
+            $deadline = $startsAt->modify('-' . (int) $appointment['cancellation_notice_minutes'] . ' minutes');
+            if (new DateTimeImmutable('now', $timezone) > $deadline) {
+                throw new \RuntimeException('O prazo para cancelamento online deste agendamento já encerrou. Entre em contato com o estabelecimento.');
+            }
+
+            $update = $pdo->prepare('UPDATE appointments SET status = "cancelled" WHERE id = :id AND client_user_id = :client');
+            $update->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+            $event = $pdo->prepare(
+                'INSERT INTO appointment_events (appointment_id, establishment_id, user_id, event_type, from_status, to_status, details) '
+                . 'VALUES (:appointment, :establishment, :user, "status_changed", :from_status, "cancelled", :details)'
+            );
+            $event->execute([
+                'appointment' => $appointmentId,
+                'establishment' => $appointment['establishment_id'],
+                'user' => Auth::id(),
+                'from_status' => $appointment['status'],
+                'details' => 'Cancelado pelo cliente.',
+            ]);
+            $pdo->commit();
+            flash('success', 'Agendamento cancelado.');
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível cancelar o agendamento.');
+        }
+        redirect('/painel/agendamentos');
     }
 }

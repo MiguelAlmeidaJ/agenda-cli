@@ -10,6 +10,7 @@ $statusLabels = [
     'no_show' => 'Não compareceu',
 ];
 $canManage = in_array($role, ['owner', 'employee'], true);
+$showActions = $canManage || $role === 'client';
 ?>
 <section class="page-header">
   <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
@@ -31,7 +32,7 @@ $canManage = in_array($role, ['owner', 'employee'], true);
       <th>Serviço</th><th>Profissional</th>
       <?php if ($role !== 'client'): ?><th>Cliente</th><?php endif; ?>
       <th>Status</th><th class="text-end">Valor</th>
-      <?php if ($canManage): ?><th class="pe-4 text-end">Ações</th><?php endif; ?>
+      <?php if ($showActions): ?><th class="pe-4 text-end">Ações</th><?php endif; ?>
     </tr></thead>
     <tbody>
     <?php foreach ($appointments as $appointment): ?>
@@ -60,10 +61,18 @@ $canManage = in_array($role, ['owner', 'employee'], true);
               <?php if (!in_array($appointment['status'], ['pending', 'confirmed'], true)): ?><a class="dropdown-item rounded" href="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/editar')) ?>"><i class="bi bi-clock-history me-2"></i>Ver histórico</a><?php endif; ?>
             </div>
           </div></td>
+        <?php elseif ($role === 'client'): ?>
+          <td class="pe-4 text-end">
+            <?php if (in_array($appointment['status'], ['pending', 'confirmed'], true) && strtotime((string) $appointment['starts_at']) > time()): ?>
+              <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/cancelar')) ?>" onsubmit="return confirm('Deseja cancelar este agendamento?')">
+                <?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit">Cancelar</button>
+              </form>
+            <?php else: ?><span class="small text-muted-app">—</span><?php endif; ?>
+          </td>
         <?php endif; ?>
       </tr>
     <?php endforeach; ?>
-    <?php if ($appointments === []): ?><tr><td colspan="<?= $canManage ? '8' : '7' ?>" class="text-center text-muted-app py-5">Nenhum agendamento encontrado.</td></tr><?php endif; ?>
+    <?php if ($appointments === []): ?><tr><td colspan="<?= $showActions ? '8' : '7' ?>" class="text-center text-muted-app py-5">Nenhum agendamento encontrado.</td></tr><?php endif; ?>
     </tbody>
   </table>
 </div></div></div>
