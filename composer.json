@@ -1,0 +1,19 @@
+{
+  "name": "miguelalmeidaj/agenda-cli",
+  "description": "Sistema multi-tenant de agendamentos em PHP e MySQL",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-pdo_mysql": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    },
+    "files": ["src/helpers.php"]
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
