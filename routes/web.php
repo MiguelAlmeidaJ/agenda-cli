@@ -24,6 +24,7 @@ $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/servicos', [PanelController::class, 'services']);
 $router->post('/painel/servicos', [PanelController::class, 'storeService']);
+$router->post('/painel/servicos/{id}', [PanelController::class, 'updateService']);
 $router->get('/painel/horarios', [PanelController::class, 'hours']);
 $router->post('/painel/horarios', [PanelController::class, 'storeHours']);
 $router->get('/painel/agendamentos', [PanelController::class, 'appointments']);
