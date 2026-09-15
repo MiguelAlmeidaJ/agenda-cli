@@ -17,6 +17,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <title><?= e($title ?? env('APP_NAME', 'Agenda CLI')) ?></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3ynZC/v9SaYI/Z+LsEEbHfJQp2Po0=" crossorigin="">
   <link href="<?= e(url('/assets/css/app.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/experience.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/operations.css')) ?>" rel="stylesheet">
@@ -114,6 +115,14 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+window.AgendaCliMapConfig = <?= json_encode([
+    'tileUrl' => (string) env('MAP_TILE_URL', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+    'attribution' => '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+</script>
+<script src="<?= e(url('/assets/js/maps.js')) ?>"></script>
 <script src="<?= e(url('/assets/js/waitlist.js')) ?>"></script>
 </body>
 </html>
