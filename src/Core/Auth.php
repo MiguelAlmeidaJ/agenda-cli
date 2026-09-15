@@ -11,7 +11,7 @@ final class Auth
     public static function attempt(string $email, string $password): bool
     {
         $stmt = Database::connection()->prepare('SELECT * FROM users WHERE email = :email AND status = "active" LIMIT 1');
-        $stmt->execute(['email' => mb_strtolower(trim($email))]);
+        $stmt->execute(['email' => strtolower(trim($email))]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
