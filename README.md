@@ -5,8 +5,8 @@ Sistema web multi-tenant de agendamentos feito em PHP + MySQL, com interface em 
 ## Perfis
 
 - **Admin**: visão global da plataforma.
-- **Dono do estabelecimento**: gerencia serviços, horários e agenda do estabelecimento.
-- **Funcionário**: vinculado a um estabelecimento e preparado para receber serviços/agendamentos.
+- **Dono do estabelecimento**: gerencia serviços, equipe, horários e agenda do estabelecimento.
+- **Funcionário**: vinculado a um estabelecimento, com agenda e horários próprios.
 - **Cliente**: navega pelos estabelecimentos e agenda horários.
 
 ## Stack
@@ -67,12 +67,18 @@ php database/seed.php
 
 ## Atualizações de banco
 
-Para instalações que já possuem o banco criado, aplique as migrations novas da pasta `database/migrations/`.
+Para instalações que já possuem o banco criado, aplique as migrations novas da pasta `database/migrations/` na ordem em que foram adicionadas.
 
-A gestão de feriados, fechamentos e horários excepcionais requer:
+Gestão de feriados, fechamentos e horários excepcionais:
 
 ```bash
 mysql -u usuario -p banco < database/migrations/2026_09_15_create_special_hours.sql
+```
+
+Agenda individual por profissional e histórico operacional de agendamentos:
+
+```bash
+mysql -u usuario -p banco < database/migrations/2026_09_15_operations_v2.sql
 ```
 
 ### Apache
@@ -108,20 +114,38 @@ Depois do seed, use estas contas apenas no ambiente local/desenvolvimento:
 
 O tenant é o **estabelecimento**. Dados operacionais carregam `establishment_id`, e as consultas de painel sempre aplicam o estabelecimento do usuário autenticado. Admin é o único perfil com visão global.
 
+Enquanto ainda não existe um seletor de estabelecimento no login do funcionário, o sistema impede que um mesmo perfil `employee` seja vinculado simultaneamente a estabelecimentos diferentes. Isso evita contexto de tenant ambíguo.
+
 ## Regras de agenda
 
 - Um profissional pode realizar mais de um serviço, mas nunca pode receber agendamentos sobrepostos.
-- O horário semanal define o funcionamento normal.
+- O horário semanal do estabelecimento define o funcionamento normal.
 - Uma data especial sobrescreve o horário semanal apenas naquela data.
 - Feriados nacionais ficam fechados por padrão e podem ser configurados para abrir em horário especial.
 - Feriados estaduais, municipais e outras datas podem ser adicionados manualmente.
 - Fechamentos emergenciais bloqueiam novos horários, sem cancelar automaticamente agendamentos já existentes.
+- Cada profissional pode herdar o horário do estabelecimento, usar uma jornada própria ou marcar um dia da semana como folga.
+- Bloqueios individuais retiram períodos específicos da disponibilidade do profissional.
+- Reagendamentos recalculam a disponibilidade e continuam protegidos contra conflito simultâneo.
+
+## Operação
+
+O dono possui telas separadas para:
+
+- agenda diária por profissional;
+- gestão da equipe;
+- jornada individual e bloqueios de cada profissional;
+- serviços e vínculos de profissionais;
+- horários, feriados e exceções do estabelecimento;
+- confirmação, conclusão, falta, cancelamento e reagendamento;
+- histórico de mudanças de cada agendamento.
 
 ## Próximos passos sugeridos
 
-- CRUD completo de estabelecimentos pelo admin.
-- Convites e gestão de funcionários pelo dono.
-- Horários individuais por funcionário e folgas recorrentes.
-- Notificações por e-mail/WhatsApp.
-- Pagamentos e política de cancelamento.
+- Cadastro manual de agendamento pelo estabelecimento.
+- CRM simples de clientes e histórico de visitas.
+- Notificações por e-mail/WhatsApp e confirmação de presença.
+- Lista de espera para horários disputados.
+- Pagamentos/sinal e política de cancelamento.
+- Refatoração de papéis por vínculo para suportar multiunidade de forma completa.
 - Testes automatizados de unidade e integração.
