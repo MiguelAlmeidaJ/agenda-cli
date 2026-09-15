@@ -9,7 +9,6 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
-use App\Services\NotificationDispatcher;
 use App\Services\NotificationService;
 use App\Services\WaitlistAutomationService;
 
@@ -36,7 +35,6 @@ final class NotificationController
 
         View::render('panel/notifications', [
             'title'=>'Notificações','settings'=>$settings,'outbox'=>$outbox->fetchAll(),'counts'=>$byStatus,'role'=>Auth::role(),
-            'evolutionConfigured'=>trim((string) env('EVOLUTION_GO_BASE_URL','')) !== '' && trim((string) env('EVOLUTION_GO_HEADER_FILE','')) !== '',
         ]);
     }
 
@@ -47,8 +45,7 @@ final class NotificationController
         $establishmentId = TenantContext::requireEstablishmentId();
         $matches = (new WaitlistAutomationService())->scanEstablishment($establishmentId);
         $events = (new NotificationService())->scheduleEstablishment($establishmentId);
-        $delivery = (new NotificationDispatcher())->dispatchEstablishment($establishmentId);
-        flash('success', $matches['matched'] . ' compatibilidade(s), ' . array_sum($events) . ' notificação(ões) preparada(s), ' . $delivery['sent'] . ' enviada(s) e ' . $delivery['failed'] . ' falha(s).');
+        flash('success', $matches['matched'] . ' compatibilidade(s) de espera e ' . array_sum($events) . ' nova(s) notificação(ões) preparada(s).');
         redirect('/painel/notificacoes');
     }
 
@@ -58,12 +55,7 @@ final class NotificationController
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
         $provider = trim((string) ($_POST['provider'] ?? 'manual'));
-        if (!in_array($provider, ['manual', 'evolution_go', 'meta_cloud', 'custom'], true)) $provider = 'manual';
-
-        if ($provider === 'evolution_go' && (trim((string) env('EVOLUTION_GO_BASE_URL','')) === '' || trim((string) env('EVOLUTION_GO_HEADER_FILE','')) === '')) {
-            flash('error', 'Configure EVOLUTION_GO_BASE_URL e EVOLUTION_GO_HEADER_FILE no .env antes de ativar a Evolution GO.');
-            redirect('/painel/notificacoes');
-        }
+        if (!in_array($provider, ['manual', 'meta_cloud', 'custom'], true)) $provider = 'manual';
 
         $stmt = Database::connection()->prepare(
             'INSERT INTO notification_settings (establishment_id,whatsapp_enabled,provider,confirmation_enabled,cancellation_enabled,reminder_24h_enabled,reminder_2h_enabled,waitlist_enabled) '
