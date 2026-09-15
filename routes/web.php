@@ -36,6 +36,7 @@ $router->post('/logout', [AuthController::class, 'logout']);
 
 $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/perfil', [ProfileController::class, 'index']);
+$router->post('/painel/perfil', [ProfileController::class, 'update']);
 $router->post('/painel/perfil/foto', [ProfileController::class, 'uploadAvatar']);
 $router->post('/painel/perfil/foto/remover', [ProfileController::class, 'deleteAvatar']);
 $router->get('/painel/agenda', [AgendaController::class, 'index']);
