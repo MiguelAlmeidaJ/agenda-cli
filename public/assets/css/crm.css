@@ -1,0 +1,75 @@
+.crm-card {
+  overflow: hidden;
+  border-radius: .9rem;
+}
+
+.crm-customer-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 92px 130px 18px;
+  align-items: center;
+  gap: .9rem;
+  padding: 1rem 1.25rem;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid #eff1f3;
+  transition: background .12s ease;
+}
+.crm-customer-row:last-child { border-bottom: 0; }
+.crm-customer-row:hover { background: #fafbfc; }
+.crm-avatar {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #20242a;
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 700;
+}
+.crm-avatar-lg { width: 52px; height: 52px; font-size: 1rem; }
+.crm-customer-main { min-width: 0; }
+.crm-customer-main strong, .crm-customer-main small,
+.crm-customer-stat strong, .crm-customer-stat small,
+.crm-customer-next strong, .crm-customer-next small { display: block; }
+.crm-customer-main strong { font-size: .9rem; }
+.crm-customer-main small {
+  margin-top: .15rem;
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: .74rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.crm-customer-stat strong, .crm-customer-next strong { font-size: .82rem; }
+.crm-customer-stat small, .crm-customer-next small { margin-top: .1rem; color: var(--app-muted); font-size: .67rem; }
+.crm-metric-text { margin-top: .35rem; font-size: 1.2rem; font-weight: 700; letter-spacing: -.03em; }
+
+.manual-booking-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.manual-booking-step:first-of-type { padding-top: 0; }
+.manual-selected-time {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: .375rem .75rem;
+  border: 1px dashed #d9dde3;
+  border-radius: .375rem;
+  background: #fafbfc;
+  color: var(--app-muted);
+  font-size: .86rem;
+}
+.provider-public-any { background: #f8f9fa; }
+.provider-public-any .provider-avatar { background: #eef1f4; color: #20242a; }
+
+@media (max-width: 767.98px) {
+  .crm-customer-row { grid-template-columns: 38px minmax(0, 1fr) 16px; padding: .9rem 1rem; }
+  .crm-avatar { width: 36px; height: 36px; }
+}
