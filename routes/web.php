@@ -38,6 +38,7 @@ $router->get('/painel/lista-espera', [WaitlistController::class, 'index']);
 $router->post('/painel/lista-espera/verificar', [WaitlistController::class, 'scan']);
 $router->post('/painel/lista-espera/{id}/status', [WaitlistController::class, 'status']);
 $router->get('/painel/notificacoes', [NotificationController::class, 'index']);
+$router->post('/painel/notificacoes/preparar', [NotificationController::class, 'prepare']);
 $router->post('/painel/notificacoes/configuracoes', [NotificationController::class, 'storeSettings']);
 $router->post('/painel/notificacoes/{id}/enviada', [NotificationController::class, 'markSent']);
 
