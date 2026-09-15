@@ -11,7 +11,7 @@ use DateTimeZone;
 
 final class AvailabilityService
 {
-    public function slots(int $establishmentId, int $serviceId, int $employeeId, string $date): array
+    public function slots(int $establishmentId, int $serviceId, int $employeeId, string $date, ?int $excludeAppointmentId = null): array
     {
         $pdo = Database::connection();
 
@@ -71,17 +71,21 @@ final class AvailabilityService
         $duration = new DateInterval('PT' . (int) $service['duration_minutes'] . 'M');
         $step = new DateInterval('PT15M');
 
-        $busyStmt = $pdo->prepare(
-            'SELECT starts_at, ends_at FROM appointments '
+        $busySql = 'SELECT starts_at, ends_at FROM appointments '
             . 'WHERE establishment_id = :establishment AND employee_user_id = :employee '
-            . 'AND status IN ("pending", "confirmed") AND starts_at < :day_end AND ends_at > :day_start'
-        );
-        $busyStmt->execute([
+            . 'AND status IN ("pending", "confirmed") AND starts_at < :day_end AND ends_at > :day_start';
+        $busyParams = [
             'establishment' => $establishmentId,
             'employee' => $employeeId,
             'day_start' => $day->format('Y-m-d H:i:s'),
             'day_end' => $day->modify('+1 day')->format('Y-m-d H:i:s'),
-        ]);
+        ];
+        if ($excludeAppointmentId !== null) {
+            $busySql .= ' AND id <> :exclude';
+            $busyParams['exclude'] = $excludeAppointmentId;
+        }
+        $busyStmt = $pdo->prepare($busySql);
+        $busyStmt->execute($busyParams);
         $busy = $busyStmt->fetchAll();
 
         $blockedStmt = $pdo->prepare(
