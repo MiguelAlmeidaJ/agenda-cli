@@ -56,16 +56,8 @@ final class AvailabilityService
             return [];
         }
 
-        $hoursStmt = $pdo->prepare(
-            'SELECT opens_at, closes_at, is_closed FROM business_hours '
-            . 'WHERE establishment_id = :establishment AND weekday = :weekday LIMIT 1'
-        );
-        $hoursStmt->execute([
-            'establishment' => $establishmentId,
-            'weekday' => (int) $day->format('N'),
-        ]);
-        $hours = $hoursStmt->fetch();
-        if (!$hours || (int) $hours['is_closed'] === 1 || !$hours['opens_at'] || !$hours['closes_at']) {
+        $hours = $this->hoursForDate($pdo, $establishmentId, $day);
+        if ($hours === null) {
             return [];
         }
 
@@ -116,6 +108,47 @@ final class AvailabilityService
         }
 
         return $slots;
+    }
+
+    private function hoursForDate(\PDO $pdo, int $establishmentId, DateTimeImmutable $day): ?array
+    {
+        $date = $day->format('Y-m-d');
+        $specialStmt = $pdo->prepare(
+            'SELECT opens_at, closes_at, is_closed FROM special_hours '
+            . 'WHERE establishment_id = :establishment AND special_date = :date LIMIT 1'
+        );
+        $specialStmt->execute([
+            'establishment' => $establishmentId,
+            'date' => $date,
+        ]);
+        $special = $specialStmt->fetch();
+
+        if ($special) {
+            if ((int) $special['is_closed'] === 1 || !$special['opens_at'] || !$special['closes_at']) {
+                return null;
+            }
+            return $special;
+        }
+
+        if ((new BrazilHolidayService())->nameForDate($date) !== null) {
+            return null;
+        }
+
+        $hoursStmt = $pdo->prepare(
+            'SELECT opens_at, closes_at, is_closed FROM business_hours '
+            . 'WHERE establishment_id = :establishment AND weekday = :weekday LIMIT 1'
+        );
+        $hoursStmt->execute([
+            'establishment' => $establishmentId,
+            'weekday' => (int) $day->format('N'),
+        ]);
+        $hours = $hoursStmt->fetch();
+
+        if (!$hours || (int) $hours['is_closed'] === 1 || !$hours['opens_at'] || !$hours['closes_at']) {
+            return null;
+        }
+
+        return $hours;
     }
 
     private function overlaps(DateTimeImmutable $start, DateTimeImmutable $end, array $periods, DateTimeZone $timezone): bool
