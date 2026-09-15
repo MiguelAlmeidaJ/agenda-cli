@@ -10,6 +10,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingSettingsController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\EstablishmentController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\NotificationController;
@@ -34,6 +35,12 @@ $router->get('/cadastro', [AuthController::class, 'register']);
 $router->post('/cadastro', [AuthController::class, 'storeRegistration']);
 $router->post('/logout', [AuthController::class, 'logout']);
 
+$router->get('/admin/estabelecimentos', [EstablishmentController::class, 'adminIndex']);
+$router->get('/admin/estabelecimentos/novo', [EstablishmentController::class, 'create']);
+$router->post('/admin/estabelecimentos', [EstablishmentController::class, 'store']);
+$router->get('/admin/estabelecimentos/{id}/editar', [EstablishmentController::class, 'adminEdit']);
+$router->post('/admin/estabelecimentos/{id}/editar', [EstablishmentController::class, 'adminUpdate']);
+
 $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/perfil', [ProfileController::class, 'index']);
 $router->post('/painel/perfil', [ProfileController::class, 'update']);
@@ -53,6 +60,9 @@ $router->get('/painel/clientes', [CustomerController::class, 'index']);
 $router->post('/painel/clientes', [CustomerController::class, 'store']);
 $router->get('/painel/clientes/{id}', [CustomerController::class, 'show']);
 $router->post('/painel/clientes/{id}', [CustomerController::class, 'update']);
+
+$router->get('/painel/estabelecimento', [EstablishmentController::class, 'ownerEdit']);
+$router->post('/painel/estabelecimento', [EstablishmentController::class, 'ownerUpdate']);
 
 $router->get('/painel/servicos', [PanelController::class, 'services']);
 $router->post('/painel/servicos', [PanelController::class, 'storeService']);
