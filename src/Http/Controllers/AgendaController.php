@@ -46,9 +46,10 @@ final class AgendaController
         }
 
         $appointmentsSql = 'SELECT a.id, a.employee_user_id, a.starts_at, a.ends_at, a.status, a.price, '
-            . 's.name AS service_name, client.name AS client_name '
+            . 's.name AS service_name, COALESCE(customer.name, client.name, "Cliente") AS client_name '
             . 'FROM appointments a JOIN services s ON s.id = a.service_id '
-            . 'JOIN users client ON client.id = a.client_user_id '
+            . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
+            . 'LEFT JOIN users client ON client.id = a.client_user_id '
             . 'WHERE a.establishment_id = :establishment AND DATE(a.starts_at) = :date ';
         $params = ['establishment' => $establishmentId, 'date' => $date];
         if (Auth::role() === 'employee') {

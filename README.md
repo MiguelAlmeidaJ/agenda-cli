@@ -5,7 +5,7 @@ Sistema web multi-tenant de agendamentos feito em PHP + MySQL, com interface em 
 ## Perfis
 
 - **Admin**: visão global da plataforma.
-- **Dono do estabelecimento**: gerencia serviços, equipe, horários e agenda do estabelecimento.
+- **Dono do estabelecimento**: gerencia serviços, equipe, horários, clientes e agenda do estabelecimento.
 - **Funcionário**: vinculado a um estabelecimento, com agenda e horários próprios.
 - **Cliente**: navega pelos estabelecimentos e agenda horários.
 
@@ -81,6 +81,20 @@ Agenda individual por profissional e histórico operacional de agendamentos:
 mysql -u usuario -p banco < database/migrations/2026_09_15_operations_v2.sql
 ```
 
+CRM de clientes e agendamento manual:
+
+```bash
+mysql -u usuario -p banco < database/migrations/2026_09_15_customers_and_manual_booking.sql
+```
+
+Regras de reserva e lista de espera:
+
+```bash
+mysql -u usuario -p banco < database/migrations/2026_09_15_booking_rules_and_waitlist.sql
+```
+
+A migration de clientes cria a entidade operacional `customers`, torna `client_user_id` opcional nos agendamentos e vincula automaticamente os agendamentos antigos aos clientes correspondentes.
+
 ### Apache
 
 Configure o VirtualHost para que o `DocumentRoot` aponte para a pasta `public/` do projeto. Exemplo:
@@ -116,6 +130,12 @@ O tenant é o **estabelecimento**. Dados operacionais carregam `establishment_id
 
 Enquanto ainda não existe um seletor de estabelecimento no login do funcionário, o sistema impede que um mesmo perfil `employee` seja vinculado simultaneamente a estabelecimentos diferentes. Isso evita contexto de tenant ambíguo.
 
+## Clientes e contas
+
+O cliente operacional do estabelecimento é armazenado em `customers`. Ele pode existir sem uma conta de login, permitindo cadastrar clientes atendidos por telefone, balcão ou WhatsApp sem criar senha artificial.
+
+Quando o cliente possui uma conta `client`, o registro de CRM pode ser vinculado por `user_id`. Reservas feitas pelo próprio cliente mantêm `client_user_id` e também ficam ligadas ao `customer_id`, fazendo o histórico público e o CRM convergirem.
+
 ## Regras de agenda
 
 - Um profissional pode realizar mais de um serviço, mas nunca pode receber agendamentos sobrepostos.
@@ -127,25 +147,33 @@ Enquanto ainda não existe um seletor de estabelecimento no login do funcionári
 - Cada profissional pode herdar o horário do estabelecimento, usar uma jornada própria ou marcar um dia da semana como folga.
 - Bloqueios individuais retiram períodos específicos da disponibilidade do profissional.
 - Reagendamentos recalculam a disponibilidade e continuam protegidos contra conflito simultâneo.
+- Agendamentos manuais usam o mesmo motor de disponibilidade do fluxo público.
+- Na reserva pública, “Primeiro horário disponível” pode selecionar automaticamente um profissional habilitado para o serviço.
+- Cada estabelecimento pode definir antecedência mínima, janela máxima de reserva e intervalo entre atendimentos.
+- O cliente pode cancelar online enquanto estiver dentro do prazo definido pelo estabelecimento.
+- A lista de espera registra interesse sem bloquear a agenda e pode ser acompanhada por dono e funcionários.
 
 ## Operação
 
-O dono possui telas separadas para:
+O estabelecimento possui telas para:
 
 - agenda diária por profissional;
+- criação manual de agendamentos;
+- CRM de clientes e histórico de visitas;
+- lista de espera;
 - gestão da equipe;
 - jornada individual e bloqueios de cada profissional;
 - serviços e vínculos de profissionais;
 - horários, feriados e exceções do estabelecimento;
+- regras de antecedência, intervalo e cancelamento;
 - confirmação, conclusão, falta, cancelamento e reagendamento;
 - histórico de mudanças de cada agendamento.
 
 ## Próximos passos sugeridos
 
-- Cadastro manual de agendamento pelo estabelecimento.
-- CRM simples de clientes e histórico de visitas.
 - Notificações por e-mail/WhatsApp e confirmação de presença.
-- Lista de espera para horários disputados.
-- Pagamentos/sinal e política de cancelamento.
+- Automação da lista de espera quando surgir uma vaga.
+- Pagamentos/sinal no agendamento.
+- Dashboard de retenção, ticket médio, no-show e serviços mais vendidos.
 - Refatoração de papéis por vínculo para suportar multiunidade de forma completa.
 - Testes automatizados de unidade e integração.

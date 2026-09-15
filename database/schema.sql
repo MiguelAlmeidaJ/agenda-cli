@@ -41,6 +41,24 @@ CREATE TABLE IF NOT EXISTS establishment_users (
     CONSTRAINT fk_establishment_users_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS customers (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NULL,
+    name VARCHAR(120) NOT NULL,
+    email VARCHAR(190) NULL,
+    phone VARCHAR(30) NULL,
+    notes TEXT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_customers_user (establishment_id, user_id),
+    UNIQUE KEY uq_customers_email (establishment_id, email),
+    KEY idx_customers_name (establishment_id, name),
+    KEY idx_customers_phone (establishment_id, phone),
+    CONSTRAINT fk_customers_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_customers_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS services (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     establishment_id BIGINT UNSIGNED NOT NULL,
@@ -109,7 +127,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     establishment_id BIGINT UNSIGNED NOT NULL,
     service_id BIGINT UNSIGNED NOT NULL,
     employee_user_id BIGINT UNSIGNED NOT NULL,
-    client_user_id BIGINT UNSIGNED NOT NULL,
+    client_user_id BIGINT UNSIGNED NULL,
+    customer_id BIGINT UNSIGNED NULL,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
     starts_at DATETIME NOT NULL,
     ends_at DATETIME NOT NULL,
@@ -121,10 +140,12 @@ CREATE TABLE IF NOT EXISTS appointments (
     KEY idx_appointments_employee_time (employee_user_id, starts_at, ends_at, status),
     KEY idx_appointments_tenant_time (establishment_id, starts_at, status),
     KEY idx_appointments_client (client_user_id, starts_at),
+    KEY idx_appointments_customer (customer_id, starts_at),
     CONSTRAINT fk_appointments_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id),
     CONSTRAINT fk_appointments_service FOREIGN KEY (service_id) REFERENCES services(id),
     CONSTRAINT fk_appointments_employee FOREIGN KEY (employee_user_id) REFERENCES users(id),
     CONSTRAINT fk_appointments_client FOREIGN KEY (client_user_id) REFERENCES users(id),
+    CONSTRAINT fk_appointments_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
     CONSTRAINT fk_appointments_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
@@ -160,4 +181,38 @@ CREATE TABLE IF NOT EXISTS appointment_events (
     CONSTRAINT fk_appointment_events_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE,
     CONSTRAINT fk_appointment_events_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
     CONSTRAINT fk_appointment_events_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS booking_settings (
+    establishment_id BIGINT UNSIGNED PRIMARY KEY,
+    min_notice_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    max_advance_days SMALLINT UNSIGNED NOT NULL DEFAULT 90,
+    buffer_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    cancellation_notice_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    allow_waitlist TINYINT(1) NOT NULL DEFAULT 1,
+    cancellation_policy VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_booking_settings_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS waitlist_entries (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    service_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
+    preferred_employee_user_id BIGINT UNSIGNED NULL,
+    desired_date DATE NOT NULL,
+    time_period ENUM('any','morning','afternoon','evening') NOT NULL DEFAULT 'any',
+    status ENUM('waiting','notified','converted','cancelled') NOT NULL DEFAULT 'waiting',
+    notes VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_waitlist_tenant_date (establishment_id, desired_date, status),
+    KEY idx_waitlist_service (service_id, desired_date, status),
+    KEY idx_waitlist_customer (customer_id, status),
+    CONSTRAINT fk_waitlist_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_waitlist_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
+    CONSTRAINT fk_waitlist_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_waitlist_provider FOREIGN KEY (preferred_employee_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

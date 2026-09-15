@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Core\Csrf;
 use App\Core\Database;
 use App\Services\AvailabilityService;
+use App\Services\CustomerService;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -25,15 +26,31 @@ final class BookingController
 
         $serviceId = (int) ($_GET['service_id'] ?? 0);
         $employeeId = (int) ($_GET['employee_id'] ?? 0);
-        $date = (string) ($_GET['date'] ?? '');
+        $date = trim((string) ($_GET['date'] ?? ''));
 
-        if ($establishmentId === 0 || $serviceId === 0 || $employeeId === 0 || $date === '') {
+        if ($establishmentId === 0 || $serviceId === 0 || $date === '') {
             http_response_code(422);
             echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
             return;
         }
 
-        $slots = (new AvailabilityService())->slots($establishmentId, $serviceId, $employeeId, $date);
+        $availability = new AvailabilityService();
+        if ($employeeId === 0) {
+            $slots = $availability->slotsForAnyProvider($establishmentId, $serviceId, $date);
+        } else {
+            $nameStmt = $pdo->prepare('SELECT name FROM users WHERE id = :provider LIMIT 1');
+            $nameStmt->execute(['provider' => $employeeId]);
+            $providerName = (string) ($nameStmt->fetchColumn() ?: 'Profissional');
+            $slots = array_map(
+                static fn (string $time): array => [
+                    'time' => $time,
+                    'employee_id' => $employeeId,
+                    'employee_name' => $providerName,
+                ],
+                $availability->slots($establishmentId, $serviceId, $employeeId, $date)
+            );
+        }
+
         echo json_encode(['slots' => $slots], JSON_UNESCAPED_UNICODE);
     }
 
@@ -60,8 +77,6 @@ final class BookingController
 
         $pdo->beginTransaction();
         try {
-            // O lock é feito no usuário prestador, então reservas concorrentes para serviços
-            // diferentes do mesmo profissional também são serializadas.
             $lock = $pdo->prepare('SELECT id FROM users WHERE id = :provider AND status = "active" FOR UPDATE');
             $lock->execute(['provider' => $employeeId]);
             if (!$lock->fetchColumn()) {
@@ -69,8 +84,7 @@ final class BookingController
             }
 
             $provider = $pdo->prepare(
-                'SELECT 1 FROM employee_services es '
-                . 'JOIN services s ON s.id = es.service_id '
+                'SELECT 1 FROM employee_services es JOIN services s ON s.id = es.service_id '
                 . 'JOIN establishments e ON e.id = s.establishment_id '
                 . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = es.employee_user_id '
                 . 'WHERE e.id = :establishment AND s.id = :service AND es.employee_user_id = :provider '
@@ -99,20 +113,22 @@ final class BookingController
                 throw new \RuntimeException('Serviço indisponível.');
             }
 
+            $customerId = (new CustomerService())->ensureForUser($pdo, (int) $establishment['id'], (int) Auth::id());
             $timezone = new DateTimeZone((string) $establishment['timezone']);
             $startsAt = new DateTimeImmutable($date . ' ' . $time . ':00', $timezone);
             $endsAt = $startsAt->add(new DateInterval('PT' . (int) $service['duration_minutes'] . 'M'));
 
             $insert = $pdo->prepare(
                 'INSERT INTO appointments '
-                . '(establishment_id, service_id, employee_user_id, client_user_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
-                . 'VALUES (:establishment, :service, :employee, :client, :creator, :starts, :ends, "confirmed", :price, :notes)'
+                . '(establishment_id, service_id, employee_user_id, client_user_id, customer_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
+                . 'VALUES (:establishment, :service, :employee, :client, :customer, :creator, :starts, :ends, "confirmed", :price, :notes)'
             );
             $insert->execute([
                 'establishment' => $establishment['id'],
                 'service' => $serviceId,
                 'employee' => $employeeId,
                 'client' => Auth::id(),
+                'customer' => $customerId,
                 'creator' => Auth::id(),
                 'starts' => $startsAt->format('Y-m-d H:i:s'),
                 'ends' => $endsAt->format('Y-m-d H:i:s'),
@@ -136,11 +152,61 @@ final class BookingController
             flash('success', 'Agendamento confirmado com sucesso.');
             redirect('/painel');
         } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            if ($pdo->inTransaction()) $pdo->rollBack();
             flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível concluir o agendamento.');
             redirect('/estabelecimentos/' . $slug);
         }
+    }
+
+    public function cancel(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $appointmentId = (int) $id;
+        $pdo = Database::connection();
+
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT a.id, a.establishment_id, a.starts_at, a.status, e.timezone, '
+                . 'COALESCE(bs.cancellation_notice_minutes, 0) AS cancellation_notice_minutes '
+                . 'FROM appointments a JOIN establishments e ON e.id = a.establishment_id '
+                . 'LEFT JOIN booking_settings bs ON bs.establishment_id = a.establishment_id '
+                . 'WHERE a.id = :id AND a.client_user_id = :client LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+            $appointment = $stmt->fetch();
+            if (!$appointment) throw new \RuntimeException('Agendamento não encontrado.');
+            if (!in_array($appointment['status'], ['pending', 'confirmed'], true)) {
+                throw new \RuntimeException('Este agendamento não pode mais ser cancelado.');
+            }
+
+            $timezone = new DateTimeZone((string) $appointment['timezone']);
+            $startsAt = new DateTimeImmutable((string) $appointment['starts_at'], $timezone);
+            $deadline = $startsAt->modify('-' . (int) $appointment['cancellation_notice_minutes'] . ' minutes');
+            if (new DateTimeImmutable('now', $timezone) > $deadline) {
+                throw new \RuntimeException('O prazo para cancelamento online deste agendamento já encerrou. Entre em contato com o estabelecimento.');
+            }
+
+            $update = $pdo->prepare('UPDATE appointments SET status = "cancelled" WHERE id = :id AND client_user_id = :client');
+            $update->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+            $event = $pdo->prepare(
+                'INSERT INTO appointment_events (appointment_id, establishment_id, user_id, event_type, from_status, to_status, details) '
+                . 'VALUES (:appointment, :establishment, :user, "status_changed", :from_status, "cancelled", :details)'
+            );
+            $event->execute([
+                'appointment' => $appointmentId,
+                'establishment' => $appointment['establishment_id'],
+                'user' => Auth::id(),
+                'from_status' => $appointment['status'],
+                'details' => 'Cancelado pelo cliente.',
+            ]);
+            $pdo->commit();
+            flash('success', 'Agendamento cancelado.');
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível cancelar o agendamento.');
+        }
+        redirect('/painel/agendamentos');
     }
 }
