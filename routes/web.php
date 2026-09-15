@@ -10,6 +10,7 @@ use App\Http\Controllers\PanelController;
 
 /** @var Router $router */
 $router->get('/', [HomeController::class, 'index']);
+$router->get('/encontre', [HomeController::class, 'find']);
 $router->get('/estabelecimentos/{slug}', [HomeController::class, 'establishment']);
 $router->get('/estabelecimentos/{slug}/horarios', [BookingController::class, 'availability']);
 $router->post('/estabelecimentos/{slug}/agendar', [BookingController::class, 'store']);
