@@ -113,17 +113,25 @@ final class PanelController
 
         $services = $pdo->prepare('SELECT * FROM services WHERE establishment_id = :establishment ORDER BY active DESC, name');
         $services->execute(['establishment' => $establishmentId]);
+        $serviceRows = $services->fetchAll();
 
-        $employees = $pdo->prepare(
-            'SELECT u.id, u.name FROM establishment_users eu JOIN users u ON u.id = eu.user_id '
-            . 'WHERE eu.establishment_id = :establishment AND eu.role = "employee" AND eu.active = 1 ORDER BY u.name'
+        $providers = $this->providersForEstablishment($pdo, $establishmentId);
+        $assignmentsStmt = $pdo->prepare(
+            'SELECT es.service_id, es.employee_user_id FROM employee_services es '
+            . 'JOIN services s ON s.id = es.service_id '
+            . 'WHERE s.establishment_id = :establishment'
         );
-        $employees->execute(['establishment' => $establishmentId]);
+        $assignmentsStmt->execute(['establishment' => $establishmentId]);
+        $assignments = [];
+        foreach ($assignmentsStmt->fetchAll() as $assignment) {
+            $assignments[(int) $assignment['service_id']][] = (int) $assignment['employee_user_id'];
+        }
 
         View::render('panel/services', [
             'title' => 'Serviços',
-            'services' => $services->fetchAll(),
-            'employees' => $employees->fetchAll(),
+            'services' => $serviceRows,
+            'providers' => $providers,
+            'assignments' => $assignments,
         ]);
     }
 
@@ -132,13 +140,14 @@ final class PanelController
         Auth::requireRole(['owner']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
+
         $name = trim((string) ($_POST['name'] ?? ''));
         $description = trim((string) ($_POST['description'] ?? ''));
         $duration = (int) ($_POST['duration_minutes'] ?? 0);
-        $price = str_replace(',', '.', trim((string) ($_POST['price'] ?? '0')));
-        $employeeIds = array_map('intval', (array) ($_POST['employee_ids'] ?? []));
+        $price = $this->parsePrice((string) ($_POST['price'] ?? '0'));
+        $providerIds = array_values(array_unique(array_map('intval', (array) ($_POST['provider_ids'] ?? []))));
 
-        if ($name === '' || $duration < 5 || !is_numeric($price) || (float) $price < 0) {
+        if ($name === '' || $duration < 5 || $price === null || $price < 0) {
             flash('error', 'Revise nome, duração e valor do serviço.');
             redirect('/painel/servicos');
         }
@@ -146,6 +155,9 @@ final class PanelController
         $pdo = Database::connection();
         $pdo->beginTransaction();
         try {
+            $providers = $this->providersForEstablishment($pdo, $establishmentId);
+            $providerIds = $this->validProviderIdsOrOwner($providers, $providerIds);
+
             $insert = $pdo->prepare(
                 'INSERT INTO services (establishment_id, name, description, duration_minutes, price) '
                 . 'VALUES (:establishment, :name, :description, :duration, :price)'
@@ -155,28 +167,77 @@ final class PanelController
                 'name' => $name,
                 'description' => $description !== '' ? $description : null,
                 'duration' => $duration,
-                'price' => number_format((float) $price, 2, '.', ''),
+                'price' => number_format($price, 2, '.', ''),
             ]);
-            $serviceId = (int) $pdo->lastInsertId();
 
-            if ($employeeIds !== []) {
-                $verify = $pdo->prepare(
-                    'SELECT user_id FROM establishment_users WHERE establishment_id = :establishment AND role = "employee" AND active = 1'
-                );
-                $verify->execute(['establishment' => $establishmentId]);
-                $allowedIds = array_map('intval', array_column($verify->fetchAll(), 'user_id'));
-                $link = $pdo->prepare('INSERT IGNORE INTO employee_services (employee_user_id, service_id) VALUES (:employee, :service)');
-                foreach (array_intersect($employeeIds, $allowedIds) as $employeeId) {
-                    $link->execute(['employee' => $employeeId, 'service' => $serviceId]);
-                }
-            }
-
+            $this->syncServiceProviders($pdo, (int) $pdo->lastInsertId(), $providerIds);
             $pdo->commit();
-            flash('success', 'Serviço cadastrado.');
+            flash('success', 'Serviço cadastrado e profissionais vinculados.');
         } catch (\Throwable $exception) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             flash('error', 'Não foi possível cadastrar o serviço.');
         }
+
+        redirect('/painel/servicos');
+    }
+
+    public function updateService(string $id): void
+    {
+        Auth::requireRole(['owner']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $serviceId = (int) $id;
+
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $description = trim((string) ($_POST['description'] ?? ''));
+        $duration = (int) ($_POST['duration_minutes'] ?? 0);
+        $price = $this->parsePrice((string) ($_POST['price'] ?? '0'));
+        $active = isset($_POST['active']) ? 1 : 0;
+        $providerIds = array_values(array_unique(array_map('intval', (array) ($_POST['provider_ids'] ?? []))));
+
+        if ($serviceId <= 0 || $name === '' || $duration < 5 || $price === null || $price < 0) {
+            flash('error', 'Revise os dados do serviço.');
+            redirect('/painel/servicos');
+        }
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $service = $pdo->prepare('SELECT id FROM services WHERE id = :service AND establishment_id = :establishment LIMIT 1 FOR UPDATE');
+            $service->execute(['service' => $serviceId, 'establishment' => $establishmentId]);
+            if (!$service->fetchColumn()) {
+                throw new \RuntimeException('Serviço não encontrado.');
+            }
+
+            $providers = $this->providersForEstablishment($pdo, $establishmentId);
+            $providerIds = $this->validProviderIdsOrOwner($providers, $providerIds);
+
+            $update = $pdo->prepare(
+                'UPDATE services SET name = :name, description = :description, duration_minutes = :duration, '
+                . 'price = :price, active = :active WHERE id = :service AND establishment_id = :establishment'
+            );
+            $update->execute([
+                'name' => $name,
+                'description' => $description !== '' ? $description : null,
+                'duration' => $duration,
+                'price' => number_format($price, 2, '.', ''),
+                'active' => $active,
+                'service' => $serviceId,
+                'establishment' => $establishmentId,
+            ]);
+
+            $this->syncServiceProviders($pdo, $serviceId, $providerIds);
+            $pdo->commit();
+            flash('success', 'Serviço atualizado.');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível atualizar o serviço.');
+        }
+
         redirect('/painel/servicos');
     }
 
@@ -263,5 +324,72 @@ final class PanelController
             'appointments' => $stmt->fetchAll(),
             'role' => $role,
         ]);
+    }
+
+    private function providersForEstablishment(\PDO $pdo, int $establishmentId): array
+    {
+        $ownerStmt = $pdo->prepare(
+            'SELECT u.id, u.name, "owner" AS provider_role FROM establishments e '
+            . 'JOIN users u ON u.id = e.owner_user_id '
+            . 'WHERE e.id = :establishment AND u.status = "active" LIMIT 1'
+        );
+        $ownerStmt->execute(['establishment' => $establishmentId]);
+        $owner = $ownerStmt->fetch();
+
+        $employeesStmt = $pdo->prepare(
+            'SELECT u.id, u.name, "employee" AS provider_role FROM establishment_users eu '
+            . 'JOIN users u ON u.id = eu.user_id '
+            . 'WHERE eu.establishment_id = :establishment AND eu.role = "employee" '
+            . 'AND eu.active = 1 AND u.status = "active" ORDER BY u.name'
+        );
+        $employeesStmt->execute(['establishment' => $establishmentId]);
+
+        return array_values(array_filter(array_merge($owner ? [$owner] : [], $employeesStmt->fetchAll())));
+    }
+
+    private function validProviderIdsOrOwner(array $providers, array $requestedIds): array
+    {
+        $allowedIds = array_map('intval', array_column($providers, 'id'));
+        $selected = array_values(array_intersect($requestedIds, $allowedIds));
+
+        if ($selected !== []) {
+            return $selected;
+        }
+
+        foreach ($providers as $provider) {
+            if (($provider['provider_role'] ?? null) === 'owner') {
+                return [(int) $provider['id']];
+            }
+        }
+
+        throw new \RuntimeException('O serviço precisa ter ao menos um profissional vinculado.');
+    }
+
+    private function syncServiceProviders(\PDO $pdo, int $serviceId, array $providerIds): void
+    {
+        $delete = $pdo->prepare('DELETE FROM employee_services WHERE service_id = :service');
+        $delete->execute(['service' => $serviceId]);
+
+        $insert = $pdo->prepare('INSERT INTO employee_services (employee_user_id, service_id) VALUES (:provider, :service)');
+        foreach ($providerIds as $providerId) {
+            $insert->execute(['provider' => (int) $providerId, 'service' => $serviceId]);
+        }
+    }
+
+    private function parsePrice(string $raw): ?float
+    {
+        $value = preg_replace('/\s+/', '', trim($raw)) ?? '';
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_contains($value, ',') && str_contains($value, '.')) {
+            $value = str_replace('.', '', $value);
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '.', $value);
+        }
+
+        return is_numeric($value) ? (float) $value : null;
     }
 }
