@@ -26,18 +26,22 @@ final class AvailabilityService
             return [];
         }
 
-        $employeeStmt = $pdo->prepare(
-            'SELECT 1 FROM establishment_users eu '
-            . 'JOIN employee_services es ON es.employee_user_id = eu.user_id '
-            . 'WHERE eu.establishment_id = :establishment AND eu.user_id = :employee '
-            . 'AND eu.active = 1 AND es.service_id = :service LIMIT 1'
+        $providerStmt = $pdo->prepare(
+            'SELECT 1 FROM employee_services es '
+            . 'JOIN services s ON s.id = es.service_id '
+            . 'JOIN establishments e ON e.id = s.establishment_id '
+            . 'JOIN users u ON u.id = es.employee_user_id '
+            . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+            . 'WHERE e.id = :establishment AND s.id = :service AND es.employee_user_id = :employee '
+            . 'AND u.status = "active" '
+            . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) LIMIT 1'
         );
-        $employeeStmt->execute([
+        $providerStmt->execute([
             'establishment' => $establishmentId,
             'employee' => $employeeId,
             'service' => $serviceId,
         ]);
-        if (!$employeeStmt->fetchColumn()) {
+        if (!$providerStmt->fetchColumn()) {
             return [];
         }
 
