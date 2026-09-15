@@ -32,12 +32,16 @@ final class ManagementController
         $previousRevenue = (float) $lastRevenue->fetchColumn();
         $currentRevenue = (float) ($month['revenue'] ?? 0);
 
-        $newCustomers = $pdo->prepare('SELECT COUNT(*) FROM customers WHERE establishment_id=:id AND created_at>=DATE_FORMAT(CURDATE(),"%Y-%m-01")');
+        $newCustomers = $pdo->prepare(
+            'SELECT COUNT(*) FROM (SELECT customer_id,MIN(starts_at) first_visit FROM appointments '
+            . 'WHERE establishment_id=:id AND customer_id IS NOT NULL GROUP BY customer_id '
+            . 'HAVING first_visit>=DATE_FORMAT(CURDATE(),"%Y-%m-01") AND first_visit<DATE_ADD(LAST_DAY(CURDATE()),INTERVAL 1 DAY)) first_visits'
+        );
         $newCustomers->execute(['id'=>$establishmentId]);
 
         $waitlist = $pdo->prepare('SELECT COUNT(*) FROM waitlist_entries WHERE establishment_id=:id AND status="waiting"');
         $waitlist->execute(['id'=>$establishmentId]);
-        $matches = $pdo->prepare('SELECT COUNT(*) FROM waitlist_matches WHERE establishment_id=:id AND status IN ("available","queued","notified") AND slot_start>=NOW()');
+        $matches = $pdo->prepare('SELECT COUNT(DISTINCT waitlist_entry_id) FROM waitlist_matches WHERE establishment_id=:id AND status IN ("available","queued","notified") AND slot_start>=NOW()');
         $matches->execute(['id'=>$establishmentId]);
         $notifications = $pdo->prepare('SELECT COUNT(*) FROM notification_outbox WHERE establishment_id=:id AND status="pending"');
         $notifications->execute(['id'=>$establishmentId]);
