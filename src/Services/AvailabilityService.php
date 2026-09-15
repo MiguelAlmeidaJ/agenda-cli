@@ -119,6 +119,49 @@ final class AvailabilityService
         return $slots;
     }
 
+    /**
+     * Retorna um único profissional para cada horário livre do serviço.
+     * Quando mais de um profissional está livre no mesmo horário, usa o primeiro
+     * da ordenação estável por nome/id. O cliente continua recebendo um horário
+     * real e o provider escolhido é revalidado transacionalmente ao confirmar.
+     */
+    public function slotsForAnyProvider(int $establishmentId, int $serviceId, string $date): array
+    {
+        $pdo = Database::connection();
+        $providers = $pdo->prepare(
+            'SELECT u.id, u.name FROM employee_services es '
+            . 'JOIN services s ON s.id = es.service_id '
+            . 'JOIN establishments e ON e.id = s.establishment_id '
+            . 'JOIN users u ON u.id = es.employee_user_id '
+            . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+            . 'WHERE e.id = :establishment AND s.id = :service AND s.active = 1 AND u.status = "active" '
+            . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) '
+            . 'ORDER BY u.name, u.id'
+        );
+        $providers->execute([
+            'establishment' => $establishmentId,
+            'service' => $serviceId,
+        ]);
+
+        $byTime = [];
+        foreach ($providers->fetchAll() as $provider) {
+            $providerId = (int) $provider['id'];
+            foreach ($this->slots($establishmentId, $serviceId, $providerId, $date) as $time) {
+                if (isset($byTime[$time])) {
+                    continue;
+                }
+                $byTime[$time] = [
+                    'time' => $time,
+                    'employee_id' => $providerId,
+                    'employee_name' => (string) $provider['name'],
+                ];
+            }
+        }
+
+        ksort($byTime, SORT_STRING);
+        return array_values($byTime);
+    }
+
     private function hoursForDate(\PDO $pdo, int $establishmentId, DateTimeImmutable $day): ?array
     {
         $date = $day->format('Y-m-d');
