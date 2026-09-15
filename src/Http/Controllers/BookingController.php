@@ -49,7 +49,7 @@ final class BookingController
         $notes = trim((string) ($_POST['notes'] ?? ''));
 
         $pdo = Database::connection();
-        $establishmentStmt = $pdo->prepare('SELECT id, timezone FROM establishments WHERE slug = :slug AND active = 1 LIMIT 1');
+        $establishmentStmt = $pdo->prepare('SELECT id, owner_user_id, timezone FROM establishments WHERE slug = :slug AND active = 1 LIMIT 1');
         $establishmentStmt->execute(['slug' => $slug]);
         $establishment = $establishmentStmt->fetch();
 
@@ -60,12 +60,29 @@ final class BookingController
 
         $pdo->beginTransaction();
         try {
-            $lock = $pdo->prepare(
-                'SELECT id FROM establishment_users WHERE establishment_id = :establishment AND user_id = :employee AND active = 1 FOR UPDATE'
-            );
-            $lock->execute(['establishment' => $establishment['id'], 'employee' => $employeeId]);
+            // O lock é feito no usuário prestador, então reservas concorrentes para serviços
+            // diferentes do mesmo profissional também são serializadas.
+            $lock = $pdo->prepare('SELECT id FROM users WHERE id = :provider AND status = "active" FOR UPDATE');
+            $lock->execute(['provider' => $employeeId]);
             if (!$lock->fetchColumn()) {
                 throw new \RuntimeException('Profissional indisponível.');
+            }
+
+            $provider = $pdo->prepare(
+                'SELECT 1 FROM employee_services es '
+                . 'JOIN services s ON s.id = es.service_id '
+                . 'JOIN establishments e ON e.id = s.establishment_id '
+                . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = es.employee_user_id '
+                . 'WHERE e.id = :establishment AND s.id = :service AND es.employee_user_id = :provider '
+                . 'AND (es.employee_user_id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) LIMIT 1'
+            );
+            $provider->execute([
+                'establishment' => $establishment['id'],
+                'service' => $serviceId,
+                'provider' => $employeeId,
+            ]);
+            if (!$provider->fetchColumn()) {
+                throw new \RuntimeException('Esse profissional não realiza mais o serviço selecionado.');
             }
 
             $slots = (new AvailabilityService())->slots((int) $establishment['id'], $serviceId, $employeeId, $date);
