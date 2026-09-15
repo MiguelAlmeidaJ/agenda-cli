@@ -24,6 +24,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <link href="<?= e(url('/assets/css/crm.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/management.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/media.css')) ?>" rel="stylesheet">
+  <link href="<?= e(url('/assets/css/maps.css')) ?>" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
