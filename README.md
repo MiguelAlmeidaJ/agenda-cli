@@ -87,6 +87,12 @@ CRM de clientes e agendamento manual:
 mysql -u usuario -p banco < database/migrations/2026_09_15_customers_and_manual_booking.sql
 ```
 
+Regras de reserva e lista de espera:
+
+```bash
+mysql -u usuario -p banco < database/migrations/2026_09_15_booking_rules_and_waitlist.sql
+```
+
 A migration de clientes cria a entidade operacional `customers`, torna `client_user_id` opcional nos agendamentos e vincula automaticamente os agendamentos antigos aos clientes correspondentes.
 
 ### Apache
@@ -143,6 +149,9 @@ Quando o cliente possui uma conta `client`, o registro de CRM pode ser vinculado
 - Reagendamentos recalculam a disponibilidade e continuam protegidos contra conflito simultâneo.
 - Agendamentos manuais usam o mesmo motor de disponibilidade do fluxo público.
 - Na reserva pública, “Primeiro horário disponível” pode selecionar automaticamente um profissional habilitado para o serviço.
+- Cada estabelecimento pode definir antecedência mínima, janela máxima de reserva e intervalo entre atendimentos.
+- O cliente pode cancelar online enquanto estiver dentro do prazo definido pelo estabelecimento.
+- A lista de espera registra interesse sem bloquear a agenda e pode ser acompanhada por dono e funcionários.
 
 ## Operação
 
@@ -151,18 +160,19 @@ O estabelecimento possui telas para:
 - agenda diária por profissional;
 - criação manual de agendamentos;
 - CRM de clientes e histórico de visitas;
+- lista de espera;
 - gestão da equipe;
 - jornada individual e bloqueios de cada profissional;
 - serviços e vínculos de profissionais;
 - horários, feriados e exceções do estabelecimento;
+- regras de antecedência, intervalo e cancelamento;
 - confirmação, conclusão, falta, cancelamento e reagendamento;
 - histórico de mudanças de cada agendamento.
 
 ## Próximos passos sugeridos
 
 - Notificações por e-mail/WhatsApp e confirmação de presença.
-- Lista de espera para horários disputados.
-- Regras de antecedência, intervalo entre serviços e política de cancelamento.
+- Automação da lista de espera quando surgir uma vaga.
 - Pagamentos/sinal no agendamento.
 - Dashboard de retenção, ticket médio, no-show e serviços mais vendidos.
 - Refatoração de papéis por vínculo para suportar multiunidade de forma completa.
