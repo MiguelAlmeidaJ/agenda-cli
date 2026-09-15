@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\NotificationService;
+use App\Services\WaitlistAutomationService;
 
 final class NotificationController
 {
@@ -30,17 +31,22 @@ final class NotificationController
         $counts = $pdo->prepare('SELECT status,COUNT(*) total FROM notification_outbox WHERE establishment_id=:id GROUP BY status');
         $counts->execute(['id' => $establishmentId]);
         $byStatus = [];
-        foreach ($counts->fetchAll() as $row) {
-            $byStatus[$row['status']] = (int) $row['total'];
-        }
+        foreach ($counts->fetchAll() as $row) $byStatus[$row['status']] = (int) $row['total'];
 
         View::render('panel/notifications', [
-            'title' => 'Notificações',
-            'settings' => $settings,
-            'outbox' => $outbox->fetchAll(),
-            'counts' => $byStatus,
-            'role' => Auth::role(),
+            'title'=>'Notificações','settings'=>$settings,'outbox'=>$outbox->fetchAll(),'counts'=>$byStatus,'role'=>Auth::role(),
         ]);
+    }
+
+    public function prepare(): void
+    {
+        Auth::requireRole(['owner','employee']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $matches = (new WaitlistAutomationService())->scanEstablishment($establishmentId);
+        $events = (new NotificationService())->scheduleEstablishment($establishmentId);
+        flash('success', $matches['matched'] . ' compatibilidade(s) de espera e ' . array_sum($events) . ' nova(s) notificação(ões) preparada(s).');
+        redirect('/painel/notificacoes');
     }
 
     public function storeSettings(): void
@@ -49,9 +55,7 @@ final class NotificationController
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
         $provider = trim((string) ($_POST['provider'] ?? 'manual'));
-        if (!in_array($provider, ['manual', 'meta_cloud', 'custom'], true)) {
-            $provider = 'manual';
-        }
+        if (!in_array($provider, ['manual', 'meta_cloud', 'custom'], true)) $provider = 'manual';
 
         $stmt = Database::connection()->prepare(
             'INSERT INTO notification_settings (establishment_id,whatsapp_enabled,provider,confirmation_enabled,cancellation_enabled,reminder_24h_enabled,reminder_2h_enabled,waitlist_enabled) '
@@ -59,14 +63,9 @@ final class NotificationController
             . 'ON DUPLICATE KEY UPDATE whatsapp_enabled=VALUES(whatsapp_enabled),provider=VALUES(provider),confirmation_enabled=VALUES(confirmation_enabled),cancellation_enabled=VALUES(cancellation_enabled),reminder_24h_enabled=VALUES(reminder_24h_enabled),reminder_2h_enabled=VALUES(reminder_2h_enabled),waitlist_enabled=VALUES(waitlist_enabled)'
         );
         $stmt->execute([
-            'id' => $establishmentId,
-            'enabled' => isset($_POST['whatsapp_enabled']) ? 1 : 0,
-            'provider' => $provider,
-            'confirmation' => isset($_POST['confirmation_enabled']) ? 1 : 0,
-            'cancellation' => isset($_POST['cancellation_enabled']) ? 1 : 0,
-            'r24' => isset($_POST['reminder_24h_enabled']) ? 1 : 0,
-            'r2' => isset($_POST['reminder_2h_enabled']) ? 1 : 0,
-            'waitlist' => isset($_POST['waitlist_enabled']) ? 1 : 0,
+            'id'=>$establishmentId,'enabled'=>isset($_POST['whatsapp_enabled'])?1:0,'provider'=>$provider,
+            'confirmation'=>isset($_POST['confirmation_enabled'])?1:0,'cancellation'=>isset($_POST['cancellation_enabled'])?1:0,
+            'r24'=>isset($_POST['reminder_24h_enabled'])?1:0,'r2'=>isset($_POST['reminder_2h_enabled'])?1:0,'waitlist'=>isset($_POST['waitlist_enabled'])?1:0,
         ]);
         flash('success', 'Preferências de notificação atualizadas.');
         redirect('/painel/notificacoes');
@@ -80,24 +79,21 @@ final class NotificationController
         $pdo = Database::connection();
         $pdo->beginTransaction();
         try {
-            $find = $pdo->prepare('SELECT id,waitlist_entry_id FROM notification_outbox WHERE id=:id AND establishment_id=:establishment LIMIT 1 FOR UPDATE');
-            $find->execute(['id' => (int) $id, 'establishment' => $establishmentId]);
+            $find = $pdo->prepare('SELECT id,waitlist_entry_id,status FROM notification_outbox WHERE id=:id AND establishment_id=:establishment LIMIT 1 FOR UPDATE');
+            $find->execute(['id'=>(int)$id,'establishment'=>$establishmentId]);
             $row = $find->fetch();
-            if (!$row) {
-                throw new \RuntimeException('Notificação não encontrada.');
-            }
+            if (!$row) throw new \RuntimeException('Notificação não encontrada.');
+            if (!in_array($row['status'], ['pending','failed'], true)) throw new \RuntimeException('Esta notificação já foi finalizada.');
 
-            $pdo->prepare('UPDATE notification_outbox SET status="sent",sent_at=NOW(),attempts=attempts+1,last_error=NULL WHERE id=:id')->execute(['id' => $row['id']]);
+            $pdo->prepare('UPDATE notification_outbox SET status="sent",sent_at=NOW(),attempts=attempts+1,last_error=NULL WHERE id=:id')->execute(['id'=>$row['id']]);
             if (!empty($row['waitlist_entry_id'])) {
-                $pdo->prepare('UPDATE waitlist_entries SET status="notified" WHERE id=:id AND establishment_id=:establishment AND status="waiting"')->execute(['id' => $row['waitlist_entry_id'], 'establishment' => $establishmentId]);
-                $pdo->prepare('UPDATE waitlist_matches SET status="notified" WHERE waitlist_entry_id=:id AND establishment_id=:establishment AND status="queued"')->execute(['id' => $row['waitlist_entry_id'], 'establishment' => $establishmentId]);
+                $pdo->prepare('UPDATE waitlist_entries SET status="notified" WHERE id=:id AND establishment_id=:establishment AND status="waiting"')->execute(['id'=>$row['waitlist_entry_id'],'establishment'=>$establishmentId]);
+                $pdo->prepare('UPDATE waitlist_matches SET status="notified" WHERE waitlist_entry_id=:id AND establishment_id=:establishment AND status="queued"')->execute(['id'=>$row['waitlist_entry_id'],'establishment'=>$establishmentId]);
             }
             $pdo->commit();
             flash('success', 'Notificação marcada como enviada.');
         } catch (\Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            if ($pdo->inTransaction()) $pdo->rollBack();
             flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível atualizar a notificação.');
         }
         redirect('/painel/notificacoes');
