@@ -91,10 +91,11 @@ final class TeamController
                 }
             } else {
                 if (strlen($password) < 8) {
-                    throw new \RuntimeException('Informe uma senha inicial com pelo menos 8 caracteres para a nova conta.');
+                    throw new \RuntimeException('Defina uma senha inicial com pelo menos 8 caracteres.');
                 }
                 $insertUser = $pdo->prepare(
-                    'INSERT INTO users (name, email, password_hash, role, phone) VALUES (:name, :email, :password, "employee", :phone)'
+                    'INSERT INTO users (name, email, password_hash, role, phone) '
+                    . 'VALUES (:name, :email, :password, "employee", :phone)'
                 );
                 $insertUser->execute([
                     'name' => $name,
@@ -106,12 +107,14 @@ final class TeamController
             }
 
             $link = $pdo->prepare(
-                'INSERT INTO establishment_users (establishment_id, user_id, role, active) VALUES (:establishment, :user, "employee", 1) '
+                'INSERT INTO establishment_users (establishment_id, user_id, role, active) '
+                . 'VALUES (:establishment, :user, "employee", 1) '
                 . 'ON DUPLICATE KEY UPDATE role = "employee", active = 1'
             );
             $link->execute(['establishment' => $establishmentId, 'user' => $userId]);
+
             $pdo->commit();
-            flash('success', 'Profissional adicionado à equipe.');
+            flash('success', $existing ? 'Profissional existente vinculado à equipe.' : 'Profissional adicionado à equipe.');
         } catch (\Throwable $exception) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -128,14 +131,16 @@ final class TeamController
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
         $userId = (int) $id;
-        $pdo = Database::connection();
 
+        $pdo = Database::connection();
         $stmt = $pdo->prepare(
             'UPDATE establishment_users SET active = IF(active = 1, 0, 1) '
             . 'WHERE establishment_id = :establishment AND user_id = :user AND role = "employee"'
         );
         $stmt->execute(['establishment' => $establishmentId, 'user' => $userId]);
-        flash('success', $stmt->rowCount() ? 'Status do profissional atualizado.' : 'Profissional não encontrado.');
+        $changed = $stmt->rowCount() > 0;
+
+        flash($changed ? 'success' : 'error', $changed ? 'Status do profissional atualizado.' : 'Profissional não encontrado.');
         redirect('/painel/equipe');
     }
 
@@ -143,42 +148,45 @@ final class TeamController
     {
         Auth::requireRole(['owner']);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $userId = (int) $id;
+        $providerId = (int) $id;
         $pdo = Database::connection();
-        $professional = $this->professional($pdo, $establishmentId, $userId);
-        if (!$professional) {
+
+        $provider = $this->provider($pdo, $establishmentId, $providerId);
+        if (!$provider) {
             http_response_code(404);
             View::render('errors/404', ['title' => 'Profissional não encontrado']);
             return;
         }
 
-        $hours = $pdo->prepare('SELECT * FROM provider_hours WHERE establishment_id = :establishment AND user_id = :user ORDER BY weekday');
-        $hours->execute(['establishment' => $establishmentId, 'user' => $userId]);
-        $hoursByDay = [];
-        foreach ($hours->fetchAll() as $hour) {
-            $hoursByDay[(int) $hour['weekday']] = $hour;
+        $hoursStmt = $pdo->prepare(
+            'SELECT * FROM provider_hours WHERE establishment_id = :establishment AND user_id = :provider ORDER BY weekday'
+        );
+        $hoursStmt->execute(['establishment' => $establishmentId, 'provider' => $providerId]);
+        $hours = [];
+        foreach ($hoursStmt->fetchAll() as $row) {
+            $hours[(int) $row['weekday']] = $row;
+        }
+
+        $businessStmt = $pdo->prepare('SELECT * FROM business_hours WHERE establishment_id = :establishment ORDER BY weekday');
+        $businessStmt->execute(['establishment' => $establishmentId]);
+        $businessHours = [];
+        foreach ($businessStmt->fetchAll() as $row) {
+            $businessHours[(int) $row['weekday']] = $row;
         }
 
         $blocks = $pdo->prepare(
-            'SELECT * FROM blocked_periods WHERE establishment_id = :establishment AND employee_user_id = :user '
-            . 'AND ends_at >= NOW() ORDER BY starts_at LIMIT 80'
+            'SELECT id, starts_at, ends_at, reason FROM blocked_periods '
+            . 'WHERE establishment_id = :establishment AND employee_user_id = :provider AND ends_at >= NOW() '
+            . 'ORDER BY starts_at ASC LIMIT 30'
         );
-        $blocks->execute(['establishment' => $establishmentId, 'user' => $userId]);
-
-        $business = $pdo->prepare('SELECT * FROM business_hours WHERE establishment_id = :establishment ORDER BY weekday');
-        $business->execute(['establishment' => $establishmentId]);
-        $businessByDay = [];
-        foreach ($business->fetchAll() as $hour) {
-            $businessByDay[(int) $hour['weekday']] = $hour;
-        }
+        $blocks->execute(['establishment' => $establishmentId, 'provider' => $providerId]);
 
         View::render('panel/team_schedule', [
-            'title' => 'Horários de ' . $professional['name'],
-            'professional' => $professional,
-            'hoursByDay' => $hoursByDay,
-            'businessByDay' => $businessByDay,
+            'title' => 'Horários de ' . $provider['name'],
+            'provider' => $provider,
+            'hours' => $hours,
+            'businessHours' => $businessHours,
             'blocks' => $blocks->fetchAll(),
-            'timezone' => $this->timezone($pdo, $establishmentId),
         ]);
     }
 
@@ -187,52 +195,61 @@ final class TeamController
         Auth::requireRole(['owner']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $userId = (int) $id;
+        $providerId = (int) $id;
         $pdo = Database::connection();
-        if (!$this->professional($pdo, $establishmentId, $userId)) {
+
+        if (!$this->provider($pdo, $establishmentId, $providerId)) {
             flash('error', 'Profissional não encontrado.');
             redirect('/painel/equipe');
         }
 
-        $pdo->beginTransaction();
-        try {
-            $delete = $pdo->prepare('DELETE FROM provider_hours WHERE establishment_id = :establishment AND user_id = :user');
-            $delete->execute(['establishment' => $establishmentId, 'user' => $userId]);
+        $upsert = $pdo->prepare(
+            'INSERT INTO provider_hours (establishment_id, user_id, weekday, opens_at, closes_at, is_off) '
+            . 'VALUES (:establishment, :provider, :weekday, :opens, :closes, :off) '
+            . 'ON DUPLICATE KEY UPDATE opens_at = VALUES(opens_at), closes_at = VALUES(closes_at), is_off = VALUES(is_off)'
+        );
+        $delete = $pdo->prepare(
+            'DELETE FROM provider_hours WHERE establishment_id = :establishment AND user_id = :provider AND weekday = :weekday'
+        );
 
-            $insert = $pdo->prepare(
-                'INSERT INTO provider_hours (establishment_id, user_id, weekday, opens_at, closes_at, is_off) '
-                . 'VALUES (:establishment, :user, :weekday, :opens, :closes, :off)'
-            );
-            for ($day = 1; $day <= 7; $day++) {
-                $mode = (string) ($_POST['mode'][$day] ?? 'inherit');
-                if ($mode === 'inherit') {
-                    continue;
-                }
-                $off = $mode === 'off' ? 1 : 0;
-                $opens = trim((string) ($_POST['opens'][$day] ?? ''));
-                $closes = trim((string) ($_POST['closes'][$day] ?? ''));
-                if (!$off && ($opens === '' || $closes === '' || $opens >= $closes)) {
-                    throw new \RuntimeException('Revise os horários personalizados antes de salvar.');
-                }
-                $insert->execute([
+        for ($weekday = 1; $weekday <= 7; $weekday++) {
+            $mode = (string) ($_POST['mode'][$weekday] ?? 'inherit');
+            if ($mode === 'inherit') {
+                $delete->execute(['establishment' => $establishmentId, 'provider' => $providerId, 'weekday' => $weekday]);
+                continue;
+            }
+
+            if ($mode === 'off') {
+                $upsert->execute([
                     'establishment' => $establishmentId,
-                    'user' => $userId,
-                    'weekday' => $day,
-                    'opens' => $off ? null : $opens,
-                    'closes' => $off ? null : $closes,
-                    'off' => $off,
+                    'provider' => $providerId,
+                    'weekday' => $weekday,
+                    'opens' => null,
+                    'closes' => null,
+                    'off' => 1,
                 ]);
+                continue;
             }
-            $pdo->commit();
-            flash('success', 'Jornada individual atualizada.');
-        } catch (\Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+
+            $opens = trim((string) ($_POST['opens'][$weekday] ?? ''));
+            $closes = trim((string) ($_POST['closes'][$weekday] ?? ''));
+            if ($opens === '' || $closes === '' || $opens >= $closes) {
+                flash('error', 'Confira os horários individuais informados.');
+                redirect('/painel/equipe/' . $providerId . '/horarios');
             }
-            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível salvar a jornada.');
+
+            $upsert->execute([
+                'establishment' => $establishmentId,
+                'provider' => $providerId,
+                'weekday' => $weekday,
+                'opens' => $opens,
+                'closes' => $closes,
+                'off' => 0,
+            ]);
         }
 
-        redirect('/painel/equipe/' . $userId . '/horarios');
+        flash('success', 'Horários individuais atualizados.');
+        redirect('/painel/equipe/' . $providerId . '/horarios');
     }
 
     public function storeBlock(string $id): void
@@ -240,9 +257,10 @@ final class TeamController
         Auth::requireRole(['owner']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $userId = (int) $id;
+        $providerId = (int) $id;
         $pdo = Database::connection();
-        if (!$this->professional($pdo, $establishmentId, $userId)) {
+
+        if (!$this->provider($pdo, $establishmentId, $providerId)) {
             flash('error', 'Profissional não encontrado.');
             redirect('/painel/equipe');
         }
@@ -251,27 +269,38 @@ final class TeamController
         $starts = trim((string) ($_POST['starts_at'] ?? ''));
         $ends = trim((string) ($_POST['ends_at'] ?? ''));
         $reason = trim((string) ($_POST['reason'] ?? ''));
-        $timezone = new DateTimeZone($this->timezone($pdo, $establishmentId));
-        $startAt = DateTimeImmutable::createFromFormat('!Y-m-d H:i', $date . ' ' . $starts, $timezone);
-        $endAt = DateTimeImmutable::createFromFormat('!Y-m-d H:i', $date . ' ' . $ends, $timezone);
-        if (!$startAt || !$endAt || $endAt <= $startAt) {
-            flash('error', 'Informe data e intervalo válidos para o bloqueio.');
-            redirect('/painel/equipe/' . $userId . '/horarios');
+
+        $timezoneStmt = $pdo->prepare('SELECT timezone FROM establishments WHERE id = :establishment LIMIT 1');
+        $timezoneStmt->execute(['establishment' => $establishmentId]);
+        $timezone = new DateTimeZone((string) ($timezoneStmt->fetchColumn() ?: 'America/Sao_Paulo'));
+
+        try {
+            $startAt = new DateTimeImmutable($date . ' ' . $starts, $timezone);
+            $endAt = new DateTimeImmutable($date . ' ' . $ends, $timezone);
+        } catch (\Throwable) {
+            flash('error', 'Informe uma data e horários válidos.');
+            redirect('/painel/equipe/' . $providerId . '/horarios');
         }
 
-        $stmt = $pdo->prepare(
+        if ($date === '' || $starts === '' || $ends === '' || $endAt <= $startAt) {
+            flash('error', 'O fim do bloqueio deve ser depois do início.');
+            redirect('/painel/equipe/' . $providerId . '/horarios');
+        }
+
+        $insert = $pdo->prepare(
             'INSERT INTO blocked_periods (establishment_id, employee_user_id, starts_at, ends_at, reason) '
-            . 'VALUES (:establishment, :user, :starts, :ends, :reason)'
+            . 'VALUES (:establishment, :provider, :starts, :ends, :reason)'
         );
-        $stmt->execute([
+        $insert->execute([
             'establishment' => $establishmentId,
-            'user' => $userId,
+            'provider' => $providerId,
             'starts' => $startAt->format('Y-m-d H:i:s'),
             'ends' => $endAt->format('Y-m-d H:i:s'),
             'reason' => $reason !== '' ? $reason : null,
         ]);
+
         flash('success', 'Bloqueio adicionado à agenda do profissional.');
-        redirect('/painel/equipe/' . $userId . '/horarios');
+        redirect('/painel/equipe/' . $providerId . '/horarios');
     }
 
     public function deleteBlock(string $id, string $blockId): void
@@ -279,31 +308,28 @@ final class TeamController
         Auth::requireRole(['owner']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $userId = (int) $id;
+        $providerId = (int) $id;
+        $block = (int) $blockId;
+
         $stmt = Database::connection()->prepare(
-            'DELETE FROM blocked_periods WHERE id = :block AND establishment_id = :establishment AND employee_user_id = :user'
+            'DELETE FROM blocked_periods WHERE id = :block AND establishment_id = :establishment AND employee_user_id = :provider'
         );
-        $stmt->execute(['block' => (int) $blockId, 'establishment' => $establishmentId, 'user' => $userId]);
-        flash('success', $stmt->rowCount() ? 'Bloqueio removido.' : 'Bloqueio não encontrado.');
-        redirect('/painel/equipe/' . $userId . '/horarios');
+        $stmt->execute(['block' => $block, 'establishment' => $establishmentId, 'provider' => $providerId]);
+
+        flash('success', 'Bloqueio removido.');
+        redirect('/painel/equipe/' . $providerId . '/horarios');
     }
 
-    private function professional(\PDO $pdo, int $establishmentId, int $userId): ?array
+    private function provider(\PDO $pdo, int $establishmentId, int $providerId): ?array
     {
         $stmt = $pdo->prepare(
-            'SELECT u.id,u.name,u.email,CASE WHEN e.owner_user_id=u.id THEN "owner" ELSE "employee" END member_role '
-            . 'FROM establishments e JOIN users u ON u.id=:user '
-            . 'LEFT JOIN establishment_users eu ON eu.establishment_id=e.id AND eu.user_id=u.id '
-            . 'WHERE e.id=:establishment AND (e.owner_user_id=u.id OR (eu.role="employee" AND eu.active=1)) LIMIT 1'
+            'SELECT u.id, u.name, u.email, CASE WHEN u.id = e.owner_user_id THEN "owner" ELSE "employee" END AS member_role '
+            . 'FROM establishments e JOIN users u ON u.id = :provider '
+            . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+            . 'WHERE e.id = :establishment AND (u.id = e.owner_user_id OR eu.role = "employee") LIMIT 1'
         );
-        $stmt->execute(['user' => $userId, 'establishment' => $establishmentId]);
-        return $stmt->fetch() ?: null;
-    }
-
-    private function timezone(\PDO $pdo, int $establishmentId): string
-    {
-        $stmt = $pdo->prepare('SELECT timezone FROM establishments WHERE id=:id LIMIT 1');
-        $stmt->execute(['id' => $establishmentId]);
-        return (string) ($stmt->fetchColumn() ?: env('APP_TIMEZONE', 'America/Sao_Paulo'));
+        $stmt->execute(['provider' => $providerId, 'establishment' => $establishmentId]);
+        $provider = $stmt->fetch();
+        return $provider ?: null;
     }
 }
