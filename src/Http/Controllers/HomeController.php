@@ -47,29 +47,36 @@ final class HomeController
 
         $services = $pdo->prepare('SELECT * FROM services WHERE establishment_id = :id AND active = 1 ORDER BY name');
         $services->execute(['id' => $establishment['id']]);
+        $serviceRows = $services->fetchAll();
 
-        $employees = $pdo->prepare(
-            'SELECT u.id, u.name, es.service_id FROM establishment_users eu '
-            . 'JOIN users u ON u.id = eu.user_id '
-            . 'JOIN employee_services es ON es.employee_user_id = u.id '
-            . 'WHERE eu.establishment_id = :id AND eu.role = "employee" AND eu.active = 1 AND u.status = "active" '
-            . 'ORDER BY u.name'
+        $providers = $pdo->prepare(
+            'SELECT u.id, u.name, es.service_id, '
+            . 'CASE WHEN u.id = e.owner_user_id THEN "owner" ELSE "employee" END AS provider_role '
+            . 'FROM employee_services es '
+            . 'JOIN services s ON s.id = es.service_id '
+            . 'JOIN establishments e ON e.id = s.establishment_id '
+            . 'JOIN users u ON u.id = es.employee_user_id '
+            . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+            . 'WHERE e.id = :id AND s.active = 1 AND u.status = "active" '
+            . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) '
+            . 'ORDER BY CASE WHEN u.id = e.owner_user_id THEN 0 ELSE 1 END, u.name'
         );
-        $employees->execute(['id' => $establishment['id']]);
+        $providers->execute(['id' => $establishment['id']]);
 
-        $employeesByService = [];
-        foreach ($employees->fetchAll() as $employee) {
-            $employeesByService[(int) $employee['service_id']][] = [
-                'id' => (int) $employee['id'],
-                'name' => $employee['name'],
+        $providersByService = [];
+        foreach ($providers->fetchAll() as $provider) {
+            $providersByService[(int) $provider['service_id']][] = [
+                'id' => (int) $provider['id'],
+                'name' => $provider['name'],
+                'role' => $provider['provider_role'],
             ];
         }
 
         View::render('establishment', [
             'title' => $establishment['name'],
             'establishment' => $establishment,
-            'services' => $services->fetchAll(),
-            'employeesByService' => $employeesByService,
+            'services' => $serviceRows,
+            'employeesByService' => $providersByService,
         ]);
     }
 }
