@@ -72,9 +72,9 @@ final class EstablishmentController
         Csrf::validate($_POST['_csrf'] ?? null);
 
         $data = $this->establishmentData($_POST);
-        $ownerEmail = strtolower(trim((string) ($_POST['owner_email'] ?? '')));
-        $ownerName = trim((string) ($_POST['owner_name'] ?? ''));
-        $ownerPhone = trim((string) ($_POST['owner_phone'] ?? ''));
+        $ownerEmail = strtolower($this->limit(trim((string) ($_POST['owner_email'] ?? '')), 190));
+        $ownerName = $this->limit(trim((string) ($_POST['owner_name'] ?? '')), 120);
+        $ownerPhone = $this->limit(trim((string) ($_POST['owner_phone'] ?? '')), 30);
         $ownerPassword = (string) ($_POST['owner_password'] ?? '');
 
         if ($data['name'] === '' || !filter_var($ownerEmail, FILTER_VALIDATE_EMAIL)) {
@@ -261,12 +261,12 @@ final class EstablishmentController
     private function establishmentData(array $input): array
     {
         return [
-            'name' => mb_substr(trim((string) ($input['name'] ?? '')), 0, 150),
-            'description' => $this->nullable(mb_substr(trim((string) ($input['description'] ?? '')), 0, 3000)),
-            'phone' => $this->nullable(mb_substr(trim((string) ($input['phone'] ?? '')), 0, 30)),
-            'email' => $this->nullable(strtolower(mb_substr(trim((string) ($input['email'] ?? '')), 0, 190))),
-            'address_line' => $this->nullable(mb_substr(trim((string) ($input['address_line'] ?? '')), 0, 190)),
-            'city' => $this->nullable(mb_substr(trim((string) ($input['city'] ?? '')), 0, 100)),
+            'name' => $this->limit(trim((string) ($input['name'] ?? '')), 150),
+            'description' => $this->nullable($this->limit(trim((string) ($input['description'] ?? '')), 3000)),
+            'phone' => $this->nullable($this->limit(trim((string) ($input['phone'] ?? '')), 30)),
+            'email' => $this->nullable(strtolower($this->limit(trim((string) ($input['email'] ?? '')), 190))),
+            'address_line' => $this->nullable($this->limit(trim((string) ($input['address_line'] ?? '')), 190)),
+            'city' => $this->nullable($this->limit(trim((string) ($input['city'] ?? '')), 100)),
             'state' => $this->nullable(strtoupper(trim((string) ($input['state'] ?? '')))),
             'timezone' => trim((string) ($input['timezone'] ?? 'America/Sao_Paulo')),
         ];
@@ -349,6 +349,14 @@ final class EstablishmentController
             $slug = substr($base, 0, 155) . '-' . $suffix;
             $suffix++;
         }
+    }
+
+    private function limit(string $value, int $length): string
+    {
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $length);
+        }
+        return substr($value, 0, $length);
     }
 
     private function nullable(string $value): ?string
