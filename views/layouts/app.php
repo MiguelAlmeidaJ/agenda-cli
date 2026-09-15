@@ -42,10 +42,21 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
           <?php endif; ?>
           <a class="nav-link" href="<?= e(url('/painel/agendamentos')) ?>">Agendamentos</a>
 
+          <?php if (($user['role'] ?? null) === 'admin'): ?>
+            <div class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</a>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/admin/estabelecimentos')) ?>"><i class="bi bi-buildings me-2"></i>Estabelecimentos</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/admin/estabelecimentos/novo')) ?>"><i class="bi bi-plus-circle me-2"></i>Novo estabelecimento</a></li>
+              </ul>
+            </div>
+          <?php endif; ?>
+
           <?php if (($user['role'] ?? null) === 'owner'): ?>
             <div class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Gestão</a>
               <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/painel/estabelecimento')) ?>"><i class="bi bi-shop me-2"></i>Estabelecimento</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/indicadores')) ?>"><i class="bi bi-bar-chart me-2"></i>Indicadores</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/equipe')) ?>"><i class="bi bi-people me-2"></i>Equipe</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/servicos')) ?>"><i class="bi bi-scissors me-2"></i>Serviços</a></li>
