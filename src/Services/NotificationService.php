@@ -57,23 +57,32 @@ final class NotificationService
         $message = sprintf('Oi %s! Surgiu um horário para %s em %s às %s com %s no %s. Entre em contato para confirmar.', $row['customer_name'], $row['service_name'], date('d/m/Y', strtotime((string) $row['slot_start'])), date('H:i', strtotime((string) $row['slot_start'])), $row['employee_name'], $row['establishment_name']);
         $dedupe = 'waitlist:' . $row['waitlist_id'] . ':' . $row['employee_user_id'] . ':' . date('YmdHi', strtotime((string) $row['slot_start']));
         $queued = $this->queue((int) $row['establishment_id'], (int) $row['customer_id'], null, (int) $row['waitlist_id'], 'waitlist_slot_available', $phone, $message, $dedupe);
-        if ($queued) {
-            $pdo->prepare('UPDATE waitlist_matches SET status="queued" WHERE id=:id AND status="available"')->execute(['id' => $matchId]);
-        }
+        if ($queued) $pdo->prepare('UPDATE waitlist_matches SET status="queued" WHERE id=:id AND status="available"')->execute(['id' => $matchId]);
         return $queued;
     }
 
     private function queueAppointments(int $establishmentId, string $condition, string $event): int
     {
+        $pdo = Database::connection();
         $sql = 'SELECT a.id,a.customer_id,a.starts_at,e.name establishment_name,s.name service_name,p.name employee_name,COALESCE(c.name,u.name,"Cliente") customer_name,COALESCE(c.phone,u.phone) phone FROM appointments a JOIN establishments e ON e.id=a.establishment_id JOIN services s ON s.id=a.service_id JOIN users p ON p.id=a.employee_user_id LEFT JOIN customers c ON c.id=a.customer_id LEFT JOIN users u ON u.id=a.client_user_id WHERE a.establishment_id=:id AND ' . $condition;
-        $stmt = Database::connection()->prepare($sql);
+        $stmt = $pdo->prepare($sql);
         $stmt->execute(['id' => $establishmentId]);
         $count = 0;
         foreach ($stmt->fetchAll() as $row) {
             $phone = $this->digits((string) ($row['phone'] ?? ''));
             if ($phone === '') continue;
             $message = $this->message($event, $row);
-            $dedupe = $event . ':' . $row['id'] . (str_starts_with($event, 'reminder_') ? ':' . date('YmdHi', strtotime((string) $row['starts_at'])) : '');
+            $slotKey = date('YmdHi', strtotime((string) $row['starts_at']));
+            $dedupe = $event . ':' . $row['id'] . ($event === 'appointment_cancelled' ? '' : ':' . $slotKey);
+
+            if ($event === 'appointment_cancelled') {
+                $cancel = $pdo->prepare('UPDATE notification_outbox SET status="cancelled" WHERE appointment_id=:appointment AND status="pending" AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")');
+                $cancel->execute(['appointment' => $row['id']]);
+            } else {
+                $cancel = $pdo->prepare('UPDATE notification_outbox SET status="cancelled" WHERE appointment_id=:appointment AND event_type=:event AND status="pending" AND dedupe_key<>:dedupe');
+                $cancel->execute(['appointment'=>$row['id'],'event'=>$event,'dedupe'=>$dedupe]);
+            }
+
             if ($this->queue($establishmentId, $row['customer_id'] ? (int) $row['customer_id'] : null, (int) $row['id'], null, $event, $phone, $message, $dedupe)) $count++;
         }
         return $count;
