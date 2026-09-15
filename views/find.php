@@ -20,7 +20,7 @@
             <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
               <div class="d-flex align-items-center gap-3">
                 <?php if (!empty($establishment['logo_url'])): ?>
-                  <span class="find-establishment-logo"><img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fill,w_120,h_120,q_auto,f_auto')) ?>" alt=""></span>
+                  <span class="find-establishment-logo"><img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fit,w_120,h_120,q_auto,f_auto')) ?>" alt=""></span>
                 <?php endif; ?>
                 <div>
                   <h2 class="h5 mb-1"><?= e($establishment['name']) ?></h2>

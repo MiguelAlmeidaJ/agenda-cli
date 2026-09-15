@@ -10,14 +10,21 @@ use App\Core\Database;
 use App\Core\View;
 use App\Services\CloudinaryMediaService;
 use App\Services\MediaCleanupService;
+use DateTimeImmutable;
 
 final class ProfileController
 {
+    private const BRAZIL_STATES = [
+        'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+        'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+    ];
+
     public function index(): void
     {
         Auth::requireLogin();
         $stmt = Database::connection()->prepare(
-            'SELECT id, name, email, phone, role, avatar_url, avatar_public_id FROM users WHERE id = :id LIMIT 1'
+            'SELECT id, name, email, phone, role, birth_date, city, state, bio, avatar_url, avatar_public_id, created_at '
+            . 'FROM users WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => Auth::id()]);
         $profile = $stmt->fetch();
@@ -31,8 +38,79 @@ final class ProfileController
         View::render('panel/profile', [
             'title' => 'Meu perfil',
             'profile' => $profile,
+            'states' => self::BRAZIL_STATES,
             'cloudinaryConfigured' => (new CloudinaryMediaService())->configured(),
         ]);
+    }
+
+    public function update(): void
+    {
+        Auth::requireLogin();
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $userId = (int) Auth::id();
+
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $email = strtolower(trim((string) ($_POST['email'] ?? '')));
+        $phone = trim((string) ($_POST['phone'] ?? ''));
+        $birthDate = trim((string) ($_POST['birth_date'] ?? ''));
+        $city = trim((string) ($_POST['city'] ?? ''));
+        $state = strtoupper(trim((string) ($_POST['state'] ?? '')));
+        $bio = trim((string) ($_POST['bio'] ?? ''));
+
+        if ($name === '' || strlen($name) > 120) {
+            flash('error', 'Informe um nome válido com até 120 caracteres.');
+            redirect('/painel/perfil');
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) {
+            flash('error', 'Informe um e-mail válido.');
+            redirect('/painel/perfil');
+        }
+        if (strlen($phone) > 30 || strlen($city) > 100 || strlen($bio) > 500) {
+            flash('error', 'Revise telefone, cidade e bio. Um dos campos excede o limite permitido.');
+            redirect('/painel/perfil');
+        }
+        if ($state !== '' && !in_array($state, self::BRAZIL_STATES, true)) {
+            flash('error', 'Selecione uma UF válida.');
+            redirect('/painel/perfil');
+        }
+
+        $birthDateValue = null;
+        if ($birthDate !== '') {
+            $parsedBirthDate = DateTimeImmutable::createFromFormat('!Y-m-d', $birthDate);
+            $minimumDate = new DateTimeImmutable('1900-01-01');
+            $today = new DateTimeImmutable('today');
+            if (!$parsedBirthDate || $parsedBirthDate->format('Y-m-d') !== $birthDate || $parsedBirthDate < $minimumDate || $parsedBirthDate > $today) {
+                flash('error', 'Informe uma data de nascimento válida.');
+                redirect('/painel/perfil');
+            }
+            $birthDateValue = $birthDate;
+        }
+
+        $pdo = Database::connection();
+        $duplicate = $pdo->prepare('SELECT id FROM users WHERE email = :email AND id <> :id LIMIT 1');
+        $duplicate->execute(['email' => $email, 'id' => $userId]);
+        if ($duplicate->fetchColumn()) {
+            flash('error', 'Este e-mail já está sendo usado por outra conta.');
+            redirect('/painel/perfil');
+        }
+
+        $stmt = $pdo->prepare(
+            'UPDATE users SET name = :name, email = :email, phone = :phone, birth_date = :birth_date, '
+            . 'city = :city, state = :state, bio = :bio WHERE id = :id'
+        );
+        $stmt->execute([
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone !== '' ? $phone : null,
+            'birth_date' => $birthDateValue,
+            'city' => $city !== '' ? $city : null,
+            'state' => $state !== '' ? $state : null,
+            'bio' => $bio !== '' ? $bio : null,
+            'id' => $userId,
+        ]);
+
+        flash('success', 'Dados pessoais atualizados.');
+        redirect('/painel/perfil');
     }
 
     public function uploadAvatar(): void

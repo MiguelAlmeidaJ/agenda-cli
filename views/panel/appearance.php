@@ -47,12 +47,12 @@
     <div class="card media-card h-100">
       <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-          <div><h2 class="h5 mb-1">Logo</h2><p class="small text-muted-app mb-0">Prefira uma imagem quadrada, com fundo limpo.</p></div>
+          <div><h2 class="h5 mb-1">Logo</h2><p class="small text-muted-app mb-0">Prefira uma imagem quadrada ou vertical, com fundo limpo. O logo será exibido inteiro, sem recorte.</p></div>
           <span class="icon-box icon-box-sm"><i class="bi bi-shop"></i></span>
         </div>
         <div class="media-logo-preview mb-3">
           <?php if (!empty($establishment['logo_url'])): ?>
-            <img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fill,w_320,h_320,q_auto,f_auto')) ?>" alt="Logo de <?= e($establishment['name']) ?>">
+            <img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fit,w_320,h_320,q_auto,f_auto')) ?>" alt="Logo de <?= e($establishment['name']) ?>">
           <?php else: ?>
             <div class="media-empty-logo"><?= e(strtoupper(substr((string) $establishment['name'], 0, 1))) ?></div>
           <?php endif; ?>
