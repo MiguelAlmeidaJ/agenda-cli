@@ -20,6 +20,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <link href="<?= e(url('/assets/css/app.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/experience.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/operations.css')) ?>" rel="stylesheet">
+  <link href="<?= e(url('/assets/css/crm.css')) ?>" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
@@ -33,6 +34,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
           <a class="nav-link" href="<?= e(url('/painel')) ?>">Painel</a>
           <?php if (in_array(($user['role'] ?? null), ['owner', 'employee'], true)): ?>
             <a class="nav-link" href="<?= e(url('/painel/agenda')) ?>">Agenda</a>
+            <a class="nav-link" href="<?= e(url('/painel/clientes')) ?>">Clientes</a>
           <?php endif; ?>
           <a class="nav-link" href="<?= e(url('/painel/agendamentos')) ?>">Agendamentos</a>
 
