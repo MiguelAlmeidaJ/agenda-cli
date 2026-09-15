@@ -46,10 +46,10 @@ final class AuthController
     {
         Csrf::validate($_POST['_csrf'] ?? null);
         $name = trim((string) ($_POST['name'] ?? ''));
-        $email = mb_strtolower(trim((string) ($_POST['email'] ?? '')));
+        $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
 
-        if (mb_strlen($name) < 3 || !filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($password) < 8) {
+        if (strlen($name) < 3 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
             flash('error', 'Preencha os dados corretamente. A senha precisa ter ao menos 8 caracteres.');
             redirect('/cadastro');
         }
