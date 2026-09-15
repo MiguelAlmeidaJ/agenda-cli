@@ -18,6 +18,12 @@ final class PanelController
         $pdo = Database::connection();
         $role = Auth::role();
         $metrics = [];
+        $dashboard = [
+            'establishment' => null,
+            'nextAppointments' => [],
+            'todayRevenue' => 0.0,
+            'pendingToday' => 0,
+        ];
 
         if ($role === 'admin') {
             $metrics = [
@@ -31,21 +37,62 @@ final class PanelController
             $metrics = ['Próximos agendamentos' => (int) $stmt->fetchColumn()];
         } else {
             $establishmentId = TenantContext::requireEstablishmentId();
+
             if ($role === 'employee') {
                 $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment AND employee_user_id = :user AND DATE(starts_at) = CURDATE() AND status IN ("pending", "confirmed")');
                 $stmt->execute(['establishment' => $establishmentId, 'user' => Auth::id()]);
                 $metrics = ['Atendimentos hoje' => (int) $stmt->fetchColumn()];
             } else {
+                $establishment = $pdo->prepare('SELECT id, name, slug FROM establishments WHERE id = :establishment LIMIT 1');
+                $establishment->execute(['establishment' => $establishmentId]);
+
                 $services = $pdo->prepare('SELECT COUNT(*) FROM services WHERE establishment_id = :establishment AND active = 1');
                 $services->execute(['establishment' => $establishmentId]);
-                $today = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment AND DATE(starts_at) = CURDATE() AND status IN ("pending", "confirmed")');
-                $today->execute(['establishment' => $establishmentId]);
+
                 $employees = $pdo->prepare('SELECT COUNT(*) FROM establishment_users WHERE establishment_id = :establishment AND role = "employee" AND active = 1');
                 $employees->execute(['establishment' => $establishmentId]);
+
+                $today = $pdo->prepare(
+                    'SELECT COUNT(*) AS total, COALESCE(SUM(price), 0) AS revenue, '
+                    . 'COALESCE(SUM(status = "pending"), 0) AS pending '
+                    . 'FROM appointments WHERE establishment_id = :establishment '
+                    . 'AND DATE(starts_at) = CURDATE() AND status IN ("pending", "confirmed")'
+                );
+                $today->execute(['establishment' => $establishmentId]);
+                $todaySummary = $today->fetch() ?: ['total' => 0, 'revenue' => 0, 'pending' => 0];
+
+                $week = $pdo->prepare(
+                    'SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment '
+                    . 'AND starts_at >= NOW() AND starts_at < DATE_ADD(NOW(), INTERVAL 7 DAY) '
+                    . 'AND status IN ("pending", "confirmed")'
+                );
+                $week->execute(['establishment' => $establishmentId]);
+
+                $nextAppointments = $pdo->prepare(
+                    'SELECT a.id, a.starts_at, a.status, a.price, s.name AS service_name, '
+                    . 'employee.name AS employee_name, client.name AS client_name '
+                    . 'FROM appointments a '
+                    . 'JOIN services s ON s.id = a.service_id '
+                    . 'JOIN users employee ON employee.id = a.employee_user_id '
+                    . 'JOIN users client ON client.id = a.client_user_id '
+                    . 'WHERE a.establishment_id = :establishment AND a.starts_at >= NOW() '
+                    . 'AND a.status IN ("pending", "confirmed") '
+                    . 'ORDER BY a.starts_at ASC LIMIT 6'
+                );
+                $nextAppointments->execute(['establishment' => $establishmentId]);
+
                 $metrics = [
-                    'Agendamentos hoje' => (int) $today->fetchColumn(),
+                    'Agendamentos hoje' => (int) $todaySummary['total'],
+                    'Próximos 7 dias' => (int) $week->fetchColumn(),
                     'Serviços ativos' => (int) $services->fetchColumn(),
                     'Funcionários' => (int) $employees->fetchColumn(),
+                ];
+
+                $dashboard = [
+                    'establishment' => $establishment->fetch() ?: null,
+                    'nextAppointments' => $nextAppointments->fetchAll(),
+                    'todayRevenue' => (float) $todaySummary['revenue'],
+                    'pendingToday' => (int) $todaySummary['pending'],
                 ];
             }
         }
@@ -53,6 +100,7 @@ final class PanelController
         View::render('panel/index', [
             'title' => 'Painel',
             'metrics' => $metrics,
+            'dashboard' => $dashboard,
             'role' => $role,
         ]);
     }
