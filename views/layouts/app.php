@@ -30,14 +30,18 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
         <?php if ($user): ?>
           <a class="nav-link" href="<?= e(url('/encontre')) ?>">Encontre</a>
           <a class="nav-link" href="<?= e(url('/painel')) ?>">Painel</a>
+          <?php if (in_array(($user['role'] ?? null), ['owner', 'employee'], true)): ?>
+            <a class="nav-link" href="<?= e(url('/painel/agenda')) ?>">Agenda</a>
+          <?php endif; ?>
           <a class="nav-link" href="<?= e(url('/painel/agendamentos')) ?>">Agendamentos</a>
 
           <?php if (($user['role'] ?? null) === 'owner'): ?>
             <div class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Gestão</a>
               <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/painel/equipe')) ?>"><i class="bi bi-people me-2"></i>Equipe</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/servicos')) ?>"><i class="bi bi-scissors me-2"></i>Serviços</a></li>
-                <li><a class="dropdown-item" href="<?= e(url('/painel/horarios')) ?>"><i class="bi bi-clock me-2"></i>Horários</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/painel/horarios')) ?>"><i class="bi bi-clock me-2"></i>Funcionamento</a></li>
               </ul>
             </div>
           <?php endif; ?>
