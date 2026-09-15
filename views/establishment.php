@@ -22,10 +22,19 @@ for ($i = 0; $i < 7; $i++) {
 
 $user = Auth::user();
 ?>
+<?php if (!empty($establishment['cover_url'])): ?>
+  <div class="public-establishment-cover">
+    <img src="<?= e(cloudinary_image_url($establishment['cover_url'], 'c_fill,w_1600,h_520,q_auto,f_auto')) ?>" alt="Capa de <?= e($establishment['name']) ?>">
+  </div>
+<?php endif; ?>
+
 <section class="public-establishment-header">
   <a href="<?= e(url('/encontre')) ?>" class="small text-decoration-none text-muted-app"><i class="bi bi-arrow-left me-1"></i>Voltar para estabelecimentos</a>
   <div class="row g-4 mt-2 align-items-end">
     <div class="col-lg-8">
+      <?php if (!empty($establishment['logo_url'])): ?>
+        <div class="public-establishment-logo"><img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fill,w_220,h_220,q_auto,f_auto')) ?>" alt="Logo de <?= e($establishment['name']) ?>"></div>
+      <?php endif; ?>
       <span class="eyebrow mb-3">Agendamento online</span>
       <h1 class="display-6 fw-bold mb-2"><?= e($establishment['name']) ?></h1>
       <?php if (!empty($establishment['description'])): ?>
@@ -54,11 +63,16 @@ $user = Auth::user();
     <div class="d-grid gap-3" id="public-service-list">
       <?php foreach ($services as $service): ?>
         <?php $serviceId = (int) $service['id']; ?>
-        <button type="button" class="public-service-card text-start" data-service-id="<?= $serviceId ?>" data-service-name="<?= e($service['name']) ?>" data-service-price="<?= e(number_format((float) $service['price'], 2, ',', '.')) ?>" data-service-duration="<?= (int) $service['duration_minutes'] ?>" aria-pressed="false">
+        <button type="button" class="public-service-card text-start <?= !empty($service['image_url']) ? 'with-image' : '' ?>" data-service-id="<?= $serviceId ?>" data-service-name="<?= e($service['name']) ?>" data-service-price="<?= e(number_format((float) $service['price'], 2, ',', '.')) ?>" data-service-duration="<?= (int) $service['duration_minutes'] ?>" aria-pressed="false">
           <span class="public-service-main">
-            <span class="public-service-title"><?= e($service['name']) ?></span>
-            <?php if (!empty($service['description'])): ?><span class="public-service-description"><?= e($service['description']) ?></span><?php endif; ?>
-            <span class="public-service-meta"><i class="bi bi-clock me-1"></i><?= (int) $service['duration_minutes'] ?> min</span>
+            <?php if (!empty($service['image_url'])): ?>
+              <span class="public-service-image"><img src="<?= e(cloudinary_image_url($service['image_url'], 'c_fill,w_320,h_240,q_auto,f_auto')) ?>" alt=""></span>
+            <?php endif; ?>
+            <span class="public-service-copy">
+              <span class="public-service-title"><?= e($service['name']) ?></span>
+              <?php if (!empty($service['description'])): ?><span class="public-service-description"><?= e($service['description']) ?></span><?php endif; ?>
+              <span class="public-service-meta"><i class="bi bi-clock me-1"></i><?= (int) $service['duration_minutes'] ?> min</span>
+            </span>
           </span>
           <span class="public-service-side"><strong>R$ <?= e(number_format((float) $service['price'], 2, ',', '.')) ?></strong><span class="public-service-select">Selecionar <i class="bi bi-arrow-right"></i></span></span>
         </button>
@@ -155,7 +169,12 @@ function renderProviders() {
   providerSection.classList.remove('is-disabled');
   if (!people.length) { providerList.innerHTML = '<div class="booking-inline-alert"><i class="bi bi-exclamation-circle"></i><span>Este serviço está temporariamente sem profissional disponível.</span></div>'; dateSection.classList.add('is-disabled'); return; }
   const anyProvider = people.length > 1 ? `<button type="button" class="provider-public-option provider-public-any" data-provider-id="0" data-provider-name="Primeiro disponível"><span class="provider-avatar"><i class="bi bi-lightning-charge"></i></span><span><strong>Primeiro horário disponível</strong><small>O sistema escolhe um profissional livre</small></span><i class="bi bi-check-circle-fill"></i></button>` : '';
-  providerList.innerHTML = anyProvider + people.map(person => `<button type="button" class="provider-public-option" data-provider-id="${person.id}" data-provider-name="${escapeHtml(person.name)}"><span class="provider-avatar">${escapeHtml(person.name.charAt(0).toUpperCase())}</span><span><strong>${escapeHtml(person.name)}</strong><small>${person.role === 'owner' ? 'Responsável pelo estabelecimento' : 'Profissional'}</small></span><i class="bi bi-check-circle-fill"></i></button>`).join('');
+  providerList.innerHTML = anyProvider + people.map(person => {
+    const avatar = person.avatar_url
+      ? `<span class="provider-avatar"><img src="${escapeHtml(person.avatar_url)}" alt=""></span>`
+      : `<span class="provider-avatar">${escapeHtml(person.name.charAt(0).toUpperCase())}</span>`;
+    return `<button type="button" class="provider-public-option" data-provider-id="${person.id}" data-provider-name="${escapeHtml(person.name)}">${avatar}<span><strong>${escapeHtml(person.name)}</strong><small>${person.role === 'owner' ? 'Responsável pelo estabelecimento' : 'Profissional'}</small></span><i class="bi bi-check-circle-fill"></i></button>`;
+  }).join('');
   [...providerList.querySelectorAll('.provider-public-option')].forEach(button => button.addEventListener('click', () => selectProvider(button)));
   if (people.length === 1) selectProvider(providerList.querySelector('.provider-public-option'));
 }

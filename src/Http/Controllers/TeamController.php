@@ -21,7 +21,7 @@ final class TeamController
         $pdo = Database::connection();
 
         $ownerStmt = $pdo->prepare(
-            'SELECT u.id, u.name, u.email, u.phone, 1 AS active, "owner" AS member_role, '
+            'SELECT u.id, u.name, u.email, u.phone, u.avatar_url, 1 AS active, "owner" AS member_role, '
             . 'COUNT(DISTINCT s.id) AS service_count '
             . 'FROM establishments e JOIN users u ON u.id = e.owner_user_id '
             . 'LEFT JOIN employee_services es ON es.employee_user_id = u.id '
@@ -32,7 +32,7 @@ final class TeamController
         $owner = $ownerStmt->fetch();
 
         $employees = $pdo->prepare(
-            'SELECT u.id, u.name, u.email, u.phone, eu.active, "employee" AS member_role, '
+            'SELECT u.id, u.name, u.email, u.phone, u.avatar_url, eu.active, "employee" AS member_role, '
             . 'COUNT(DISTINCT s.id) AS service_count '
             . 'FROM establishment_users eu JOIN users u ON u.id = eu.user_id '
             . 'LEFT JOIN employee_services es ON es.employee_user_id = u.id '

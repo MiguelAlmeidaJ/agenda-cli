@@ -16,7 +16,13 @@
         <div class="card team-member-card">
           <div class="card-body p-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
             <div class="d-flex align-items-center gap-3">
-              <div class="team-avatar"><?= e(strtoupper(substr((string) $owner['name'], 0, 1))) ?></div>
+              <div class="team-avatar">
+                <?php if (!empty($owner['avatar_url'])): ?>
+                  <img src="<?= e(cloudinary_image_url($owner['avatar_url'], 'c_fill,w_120,h_120,g_face,q_auto,f_auto')) ?>" alt="">
+                <?php else: ?>
+                  <?= e(strtoupper(substr((string) $owner['name'], 0, 1))) ?>
+                <?php endif; ?>
+              </div>
               <div>
                 <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                   <h2 class="h6 mb-0"><?= e($owner['name']) ?></h2>
@@ -38,7 +44,13 @@
           <div class="card-body p-4">
             <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
               <div class="d-flex align-items-center gap-3">
-                <div class="team-avatar"><?= e(strtoupper(substr((string) $employee['name'], 0, 1))) ?></div>
+                <div class="team-avatar">
+                  <?php if (!empty($employee['avatar_url'])): ?>
+                    <img src="<?= e(cloudinary_image_url($employee['avatar_url'], 'c_fill,w_120,h_120,g_face,q_auto,f_auto')) ?>" alt="">
+                  <?php else: ?>
+                    <?= e(strtoupper(substr((string) $employee['name'], 0, 1))) ?>
+                  <?php endif; ?>
+                </div>
                 <div>
                   <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                     <h2 class="h6 mb-0"><?= e($employee['name']) ?></h2>
