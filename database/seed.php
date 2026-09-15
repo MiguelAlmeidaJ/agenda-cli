@@ -64,6 +64,20 @@ try {
     $membership->execute(['establishment' => $establishmentId, 'user' => $ids['owner'], 'role' => 'owner']);
     $membership->execute(['establishment' => $establishmentId, 'user' => $ids['employee'], 'role' => 'employee']);
 
+    $customer = $pdo->prepare(
+        'INSERT INTO customers (establishment_id, user_id, name, email, phone, notes) '
+        . 'VALUES (:establishment, :user, :name, :email, :phone, :notes) '
+        . 'ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), name = VALUES(name), phone = VALUES(phone)'
+    );
+    $customer->execute([
+        'establishment' => $establishmentId,
+        'user' => $ids['client'],
+        'name' => 'Cliente Demo',
+        'email' => 'cliente@agenda.local',
+        'phone' => '(32) 99999-1111',
+        'notes' => 'Cliente de demonstração.',
+    ]);
+
     $services = [
         ['Corte', 'Corte personalizado com finalização.', 45, 65.00],
         ['Escova', 'Lavagem e escova com acabamento.', 60, 80.00],
