@@ -12,7 +12,7 @@ foreach ($providers as $provider) {
     <div>
       <div class="small text-muted-app mb-1">Gestão do catálogo</div>
       <h1 class="h3 mb-1">Serviços</h1>
-      <p class="text-muted-app mb-0">Defina o que você oferece e quem pode realizar cada atendimento.</p>
+      <p class="text-muted-app mb-0">Defina o que você oferece, quem pode realizar e a imagem apresentada ao cliente.</p>
     </div>
     <span class="badge badge-soft px-3 py-2"><?= count($services) ?> serviço(s)</span>
   </div>
@@ -65,6 +65,30 @@ foreach ($providers as $provider) {
               <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-service-<?= $serviceId ?>" aria-expanded="false">
                 <i class="bi bi-pencil me-1"></i>Editar
               </button>
+            </div>
+
+            <div class="service-media-box mt-4">
+              <div class="service-media-thumb">
+                <?php if (!empty($service['image_url'])): ?>
+                  <img src="<?= e(cloudinary_image_url($service['image_url'], 'c_fill,w_360,h_270,q_auto,f_auto')) ?>" alt="Imagem de <?= e($service['name']) ?>">
+                <?php else: ?>
+                  <i class="bi bi-image"></i>
+                <?php endif; ?>
+              </div>
+              <div>
+                <div class="small fw-semibold mb-1">Imagem do serviço</div>
+                <div class="small text-muted-app mb-2">JPG, PNG, WebP, GIF ou AVIF, até 5 MB.</div>
+                <form method="post" enctype="multipart/form-data" action="<?= e(url('/painel/servicos/' . $serviceId . '/imagem')) ?>" class="d-flex flex-column flex-sm-row gap-2">
+                  <?= Csrf::field() ?>
+                  <input class="form-control form-control-sm" type="file" name="image" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" required>
+                  <button class="btn btn-sm btn-outline-dark text-nowrap" type="submit"><i class="bi bi-cloud-arrow-up me-1"></i><?= empty($service['image_url']) ? 'Enviar' : 'Trocar' ?></button>
+                </form>
+                <?php if (!empty($service['image_url'])): ?>
+                  <form method="post" action="<?= e(url('/painel/servicos/' . $serviceId . '/imagem/remover')) ?>" class="mt-1" onsubmit="return confirm('Remover a imagem deste serviço?')">
+                    <?= Csrf::field() ?><button class="btn btn-link btn-sm text-danger px-0 py-0" type="submit"><i class="bi bi-trash3 me-1"></i>Remover imagem</button>
+                  </form>
+                <?php endif; ?>
+              </div>
             </div>
           </div>
 
@@ -147,7 +171,7 @@ foreach ($providers as $provider) {
       <div class="card-body p-4">
         <div class="icon-box icon-box-sm mb-3"><i class="bi bi-plus-lg"></i></div>
         <h2 class="h5 mb-1">Novo serviço</h2>
-        <p class="small text-muted-app mb-4">Cadastre o serviço e escolha quem poderá recebê-lo na agenda.</p>
+        <p class="small text-muted-app mb-4">Cadastre o serviço e escolha quem poderá recebê-lo na agenda. Depois você poderá adicionar a imagem ao cartão do serviço.</p>
 
         <form method="post" action="<?= e(url('/painel/servicos')) ?>">
           <?= Csrf::field() ?>
