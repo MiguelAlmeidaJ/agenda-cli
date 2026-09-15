@@ -70,11 +70,12 @@ final class PanelController
 
                 $nextAppointments = $pdo->prepare(
                     'SELECT a.id, a.starts_at, a.status, a.price, s.name AS service_name, '
-                    . 'employee.name AS employee_name, client.name AS client_name '
+                    . 'employee.name AS employee_name, COALESCE(customer.name, client.name, "Cliente") AS client_name '
                     . 'FROM appointments a '
                     . 'JOIN services s ON s.id = a.service_id '
                     . 'JOIN users employee ON employee.id = a.employee_user_id '
-                    . 'JOIN users client ON client.id = a.client_user_id '
+                    . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
+                    . 'LEFT JOIN users client ON client.id = a.client_user_id '
                     . 'WHERE a.establishment_id = :establishment AND a.starts_at >= NOW() '
                     . 'AND a.status IN ("pending", "confirmed") '
                     . 'ORDER BY a.starts_at ASC LIMIT 6'
@@ -241,53 +242,6 @@ final class PanelController
         redirect('/painel/servicos');
     }
 
-    public function hours(): void
-    {
-        Auth::requireRole(['owner']);
-        $establishmentId = TenantContext::requireEstablishmentId();
-        $stmt = Database::connection()->prepare('SELECT * FROM business_hours WHERE establishment_id = :establishment ORDER BY weekday');
-        $stmt->execute(['establishment' => $establishmentId]);
-        $hours = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $hours[(int) $row['weekday']] = $row;
-        }
-
-        View::render('panel/hours', ['title' => 'Horários de funcionamento', 'hours' => $hours]);
-    }
-
-    public function storeHours(): void
-    {
-        Auth::requireRole(['owner']);
-        Csrf::validate($_POST['_csrf'] ?? null);
-        $establishmentId = TenantContext::requireEstablishmentId();
-        $pdo = Database::connection();
-        $upsert = $pdo->prepare(
-            'INSERT INTO business_hours (establishment_id, weekday, opens_at, closes_at, is_closed) '
-            . 'VALUES (:establishment, :weekday, :opens, :closes, :closed) '
-            . 'ON DUPLICATE KEY UPDATE opens_at = VALUES(opens_at), closes_at = VALUES(closes_at), is_closed = VALUES(is_closed)'
-        );
-
-        for ($weekday = 1; $weekday <= 7; $weekday++) {
-            $closed = isset($_POST['closed'][$weekday]);
-            $opens = trim((string) ($_POST['opens'][$weekday] ?? ''));
-            $closes = trim((string) ($_POST['closes'][$weekday] ?? ''));
-            if (!$closed && ($opens === '' || $closes === '' || $opens >= $closes)) {
-                flash('error', 'Confira os horários de abertura e fechamento.');
-                redirect('/painel/horarios');
-            }
-            $upsert->execute([
-                'establishment' => $establishmentId,
-                'weekday' => $weekday,
-                'opens' => $closed ? null : $opens,
-                'closes' => $closed ? null : $closes,
-                'closed' => $closed ? 1 : 0,
-            ]);
-        }
-
-        flash('success', 'Horários atualizados.');
-        redirect('/painel/horarios');
-    }
-
     public function appointments(): void
     {
         Auth::requireLogin();
@@ -295,12 +249,13 @@ final class PanelController
         $role = Auth::role();
 
         $sql = 'SELECT a.*, e.name AS establishment_name, s.name AS service_name, '
-            . 'employee.name AS employee_name, client.name AS client_name '
+            . 'employee.name AS employee_name, COALESCE(customer.name, client.name, "Cliente") AS client_name '
             . 'FROM appointments a '
             . 'JOIN establishments e ON e.id = a.establishment_id '
             . 'JOIN services s ON s.id = a.service_id '
             . 'JOIN users employee ON employee.id = a.employee_user_id '
-            . 'JOIN users client ON client.id = a.client_user_id ';
+            . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
+            . 'LEFT JOIN users client ON client.id = a.client_user_id ';
         $params = [];
 
         if ($role === 'client') {
