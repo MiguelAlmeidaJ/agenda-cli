@@ -11,6 +11,13 @@ final class HomeController
 {
     public function index(): void
     {
+        View::render('home', [
+            'title' => 'Agenda CLI - Agendamentos simples para o seu negócio',
+        ]);
+    }
+
+    public function find(): void
+    {
         $stmt = Database::connection()->query(
             'SELECT e.id, e.name, e.slug, e.description, e.city, e.state, '
             . 'COUNT(s.id) AS service_count, MIN(s.price) AS min_price '
@@ -19,8 +26,8 @@ final class HomeController
             . 'WHERE e.active = 1 GROUP BY e.id ORDER BY e.name'
         );
 
-        View::render('home', [
-            'title' => 'Encontre seu próximo horário',
+        View::render('find', [
+            'title' => 'Encontre um serviço',
             'establishments' => $stmt->fetchAll(),
         ]);
     }
