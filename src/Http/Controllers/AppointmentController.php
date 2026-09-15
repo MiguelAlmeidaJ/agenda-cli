@@ -16,6 +16,237 @@ use DateTimeZone;
 
 final class AppointmentController
 {
+    public function create(): void
+    {
+        Auth::requireRole(['owner', 'employee']);
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $pdo = Database::connection();
+        $selectedCustomerId = (int) ($_GET['customer_id'] ?? 0);
+
+        $customersStmt = $pdo->prepare(
+            'SELECT id, name, email, phone FROM customers WHERE establishment_id = :establishment ORDER BY name LIMIT 500'
+        );
+        $customersStmt->execute(['establishment' => $establishmentId]);
+
+        if (Auth::role() === 'employee') {
+            $servicesStmt = $pdo->prepare(
+                'SELECT s.id, s.name, s.duration_minutes, s.price FROM services s '
+                . 'JOIN employee_services es ON es.service_id = s.id '
+                . 'WHERE s.establishment_id = :establishment AND s.active = 1 AND es.employee_user_id = :user '
+                . 'ORDER BY s.name'
+            );
+            $servicesStmt->execute(['establishment' => $establishmentId, 'user' => Auth::id()]);
+
+            $providerStmt = $pdo->prepare(
+                'SELECT es.service_id, u.id, u.name FROM employee_services es '
+                . 'JOIN services s ON s.id = es.service_id '
+                . 'JOIN users u ON u.id = es.employee_user_id '
+                . 'WHERE s.establishment_id = :establishment AND s.active = 1 AND u.id = :user AND u.status = "active" '
+                . 'ORDER BY s.name'
+            );
+            $providerStmt->execute(['establishment' => $establishmentId, 'user' => Auth::id()]);
+        } else {
+            $servicesStmt = $pdo->prepare(
+                'SELECT id, name, duration_minutes, price FROM services '
+                . 'WHERE establishment_id = :establishment AND active = 1 ORDER BY name'
+            );
+            $servicesStmt->execute(['establishment' => $establishmentId]);
+
+            $providerStmt = $pdo->prepare(
+                'SELECT es.service_id, u.id, u.name FROM employee_services es '
+                . 'JOIN services s ON s.id = es.service_id '
+                . 'JOIN establishments e ON e.id = s.establishment_id '
+                . 'JOIN users u ON u.id = es.employee_user_id '
+                . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+                . 'WHERE e.id = :establishment AND s.active = 1 AND u.status = "active" '
+                . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) '
+                . 'ORDER BY u.name'
+            );
+            $providerStmt->execute(['establishment' => $establishmentId]);
+        }
+
+        $providersByService = [];
+        foreach ($providerStmt->fetchAll() as $provider) {
+            $providersByService[(int) $provider['service_id']][] = [
+                'id' => (int) $provider['id'],
+                'name' => (string) $provider['name'],
+            ];
+        }
+
+        View::render('panel/appointment_create', [
+            'title' => 'Novo agendamento',
+            'customers' => $customersStmt->fetchAll(),
+            'services' => $servicesStmt->fetchAll(),
+            'providersByService' => $providersByService,
+            'role' => Auth::role(),
+            'selectedCustomerId' => $selectedCustomerId,
+        ]);
+    }
+
+    public function newAvailability(): void
+    {
+        Auth::requireRole(['owner', 'employee']);
+        header('Content-Type: application/json; charset=utf-8');
+
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $serviceId = (int) ($_GET['service_id'] ?? 0);
+        $employeeId = (int) ($_GET['employee_id'] ?? 0);
+        $date = trim((string) ($_GET['date'] ?? ''));
+
+        if ($serviceId <= 0 || $date === '') {
+            http_response_code(422);
+            echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (Auth::role() === 'employee') {
+            $employeeId = (int) Auth::id();
+        }
+
+        $availability = new AvailabilityService();
+        if ($employeeId === 0 && Auth::role() === 'owner') {
+            $slots = $availability->slotsForAnyProvider($establishmentId, $serviceId, $date);
+        } else {
+            if ($employeeId <= 0) {
+                http_response_code(422);
+                echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            $pdo = Database::connection();
+            $nameStmt = $pdo->prepare('SELECT name FROM users WHERE id = :user LIMIT 1');
+            $nameStmt->execute(['user' => $employeeId]);
+            $name = (string) ($nameStmt->fetchColumn() ?: 'Profissional');
+            $slots = array_map(
+                static fn (string $time): array => [
+                    'time' => $time,
+                    'employee_id' => $employeeId,
+                    'employee_name' => $name,
+                ],
+                $availability->slots($establishmentId, $serviceId, $employeeId, $date)
+            );
+        }
+
+        echo json_encode(['slots' => $slots], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function store(): void
+    {
+        Auth::requireRole(['owner', 'employee']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $customerId = (int) ($_POST['customer_id'] ?? 0);
+        $serviceId = (int) ($_POST['service_id'] ?? 0);
+        $employeeId = (int) ($_POST['employee_id'] ?? 0);
+        $date = trim((string) ($_POST['date'] ?? ''));
+        $time = trim((string) ($_POST['time'] ?? ''));
+        $notes = trim((string) ($_POST['notes'] ?? ''));
+
+        if (Auth::role() === 'employee') {
+            $employeeId = (int) Auth::id();
+        }
+
+        if ($customerId <= 0 || $serviceId <= 0 || $employeeId <= 0 || $date === '' || $time === '') {
+            flash('error', 'Selecione cliente, serviço, profissional, data e horário.');
+            redirect('/painel/agendamentos/novo');
+        }
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $customerStmt = $pdo->prepare(
+                'SELECT id, user_id, name FROM customers WHERE id = :customer AND establishment_id = :establishment LIMIT 1 FOR UPDATE'
+            );
+            $customerStmt->execute(['customer' => $customerId, 'establishment' => $establishmentId]);
+            $customer = $customerStmt->fetch();
+            if (!$customer) {
+                throw new \RuntimeException('Cliente não encontrado.');
+            }
+
+            $serviceStmt = $pdo->prepare(
+                'SELECT s.duration_minutes, s.price, e.timezone FROM services s '
+                . 'JOIN establishments e ON e.id = s.establishment_id '
+                . 'WHERE s.id = :service AND s.establishment_id = :establishment AND s.active = 1 LIMIT 1'
+            );
+            $serviceStmt->execute(['service' => $serviceId, 'establishment' => $establishmentId]);
+            $service = $serviceStmt->fetch();
+            if (!$service) {
+                throw new \RuntimeException('Serviço indisponível.');
+            }
+
+            $providerLock = $pdo->prepare('SELECT id FROM users WHERE id = :provider AND status = "active" FOR UPDATE');
+            $providerLock->execute(['provider' => $employeeId]);
+            if (!$providerLock->fetchColumn()) {
+                throw new \RuntimeException('Profissional indisponível.');
+            }
+
+            $providerStmt = $pdo->prepare(
+                'SELECT 1 FROM employee_services es '
+                . 'JOIN services s ON s.id = es.service_id '
+                . 'JOIN establishments e ON e.id = s.establishment_id '
+                . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = es.employee_user_id '
+                . 'WHERE e.id = :establishment AND s.id = :service AND es.employee_user_id = :provider '
+                . 'AND (es.employee_user_id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) LIMIT 1'
+            );
+            $providerStmt->execute([
+                'establishment' => $establishmentId,
+                'service' => $serviceId,
+                'provider' => $employeeId,
+            ]);
+            if (!$providerStmt->fetchColumn()) {
+                throw new \RuntimeException('O profissional selecionado não realiza este serviço.');
+            }
+
+            $slots = (new AvailabilityService())->slots($establishmentId, $serviceId, $employeeId, $date);
+            if (!in_array($time, $slots, true)) {
+                throw new \RuntimeException('Esse horário não está mais disponível.');
+            }
+
+            $timezone = new DateTimeZone((string) $service['timezone']);
+            $startsAt = new DateTimeImmutable($date . ' ' . $time . ':00', $timezone);
+            $endsAt = $startsAt->add(new DateInterval('PT' . (int) $service['duration_minutes'] . 'M'));
+
+            $insert = $pdo->prepare(
+                'INSERT INTO appointments '
+                . '(establishment_id, service_id, employee_user_id, client_user_id, customer_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
+                . 'VALUES (:establishment, :service, :employee, :client, :customer, :creator, :starts, :ends, "confirmed", :price, :notes)'
+            );
+            $insert->execute([
+                'establishment' => $establishmentId,
+                'service' => $serviceId,
+                'employee' => $employeeId,
+                'client' => $customer['user_id'] ?: null,
+                'customer' => $customerId,
+                'creator' => Auth::id(),
+                'starts' => $startsAt->format('Y-m-d H:i:s'),
+                'ends' => $endsAt->format('Y-m-d H:i:s'),
+                'price' => $service['price'],
+                'notes' => $notes !== '' ? $notes : null,
+            ]);
+            $appointmentId = (int) $pdo->lastInsertId();
+
+            $this->recordEvent(
+                $pdo,
+                $appointmentId,
+                $establishmentId,
+                'created',
+                null,
+                'confirmed',
+                'Agendamento criado manualmente para ' . $customer['name'] . '.'
+            );
+
+            $pdo->commit();
+            flash('success', 'Agendamento criado com sucesso.');
+            redirect('/painel/agendamentos/' . $appointmentId . '/editar');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível criar o agendamento.');
+            redirect('/painel/agendamentos/novo');
+        }
+    }
+
     public function status(string $id): void
     {
         Auth::requireRole(['owner', 'employee']);
@@ -250,10 +481,12 @@ final class AppointmentController
 
     private function findForActor(\PDO $pdo, int $establishmentId, int $appointmentId, bool $forUpdate = false): ?array
     {
-        $sql = 'SELECT a.*, s.name AS service_name, s.duration_minutes, client.name AS client_name, '
+        $sql = 'SELECT a.*, s.name AS service_name, s.duration_minutes, '
+            . 'COALESCE(customer.name, client.name, "Cliente") AS client_name, '
             . 'employee.name AS employee_name, e.name AS establishment_name, e.slug AS establishment_slug, e.timezone '
             . 'FROM appointments a JOIN services s ON s.id = a.service_id '
-            . 'JOIN users client ON client.id = a.client_user_id '
+            . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
+            . 'LEFT JOIN users client ON client.id = a.client_user_id '
             . 'JOIN users employee ON employee.id = a.employee_user_id '
             . 'JOIN establishments e ON e.id = a.establishment_id '
             . 'WHERE a.id = :id AND a.establishment_id = :establishment ';
