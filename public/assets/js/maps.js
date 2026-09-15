@@ -1,5 +1,10 @@
 (() => {
-  document.querySelectorAll('[data-postal-code]').forEach((input) => {
+  document.querySelectorAll('input[name="postal_code"], [data-postal-code]').forEach((input) => {
+    input.maxLength = 9;
+    input.autocomplete = 'postal-code';
+    input.setAttribute('pattern', '\\d{5}-\\d{3}');
+    input.setAttribute('title', 'Informe um CEP com 8 dígitos, no formato 00000-000.');
+
     const formatPostalCode = () => {
       const digits = String(input.value || '').replace(/\D/g, '').slice(0, 8);
       input.value = digits.length > 5
