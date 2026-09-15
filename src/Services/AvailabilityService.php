@@ -11,7 +11,7 @@ use DateTimeZone;
 
 final class AvailabilityService
 {
-    public function slots(int $establishmentId, int $serviceId, int $employeeId, string $date): array
+    public function slots(int $establishmentId, int $serviceId, int $employeeId, string $date, ?int $excludeAppointmentId = null): array
     {
         $pdo = Database::connection();
 
@@ -61,22 +61,31 @@ final class AvailabilityService
             return [];
         }
 
+        $hours = $this->applyProviderHours($pdo, $establishmentId, $employeeId, $day, $hours);
+        if ($hours === null) {
+            return [];
+        }
+
         $opening = new DateTimeImmutable($date . ' ' . $hours['opens_at'], $timezone);
         $closing = new DateTimeImmutable($date . ' ' . $hours['closes_at'], $timezone);
         $duration = new DateInterval('PT' . (int) $service['duration_minutes'] . 'M');
         $step = new DateInterval('PT15M');
 
-        $busyStmt = $pdo->prepare(
-            'SELECT starts_at, ends_at FROM appointments '
+        $busySql = 'SELECT starts_at, ends_at FROM appointments '
             . 'WHERE establishment_id = :establishment AND employee_user_id = :employee '
-            . 'AND status IN ("pending", "confirmed") AND starts_at < :day_end AND ends_at > :day_start'
-        );
-        $busyStmt->execute([
+            . 'AND status IN ("pending", "confirmed") AND starts_at < :day_end AND ends_at > :day_start';
+        $busyParams = [
             'establishment' => $establishmentId,
             'employee' => $employeeId,
             'day_start' => $day->format('Y-m-d H:i:s'),
             'day_end' => $day->modify('+1 day')->format('Y-m-d H:i:s'),
-        ]);
+        ];
+        if ($excludeAppointmentId !== null) {
+            $busySql .= ' AND id <> :exclude';
+            $busyParams['exclude'] = $excludeAppointmentId;
+        }
+        $busyStmt = $pdo->prepare($busySql);
+        $busyStmt->execute($busyParams);
         $busy = $busyStmt->fetchAll();
 
         $blockedStmt = $pdo->prepare(
@@ -149,6 +158,41 @@ final class AvailabilityService
         }
 
         return $hours;
+    }
+
+    private function applyProviderHours(\PDO $pdo, int $establishmentId, int $providerId, DateTimeImmutable $day, array $establishmentHours): ?array
+    {
+        $stmt = $pdo->prepare(
+            'SELECT opens_at, closes_at, is_off FROM provider_hours '
+            . 'WHERE establishment_id = :establishment AND user_id = :provider AND weekday = :weekday LIMIT 1'
+        );
+        $stmt->execute([
+            'establishment' => $establishmentId,
+            'provider' => $providerId,
+            'weekday' => (int) $day->format('N'),
+        ]);
+        $providerHours = $stmt->fetch();
+
+        if (!$providerHours) {
+            return $establishmentHours;
+        }
+
+        if ((int) $providerHours['is_off'] === 1 || !$providerHours['opens_at'] || !$providerHours['closes_at']) {
+            return null;
+        }
+
+        $opensAt = max(substr((string) $establishmentHours['opens_at'], 0, 8), substr((string) $providerHours['opens_at'], 0, 8));
+        $closesAt = min(substr((string) $establishmentHours['closes_at'], 0, 8), substr((string) $providerHours['closes_at'], 0, 8));
+
+        if ($opensAt >= $closesAt) {
+            return null;
+        }
+
+        return [
+            'opens_at' => $opensAt,
+            'closes_at' => $closesAt,
+            'is_closed' => 0,
+        ];
     }
 
     private function overlaps(DateTimeImmutable $start, DateTimeImmutable $end, array $periods, DateTimeZone $timezone): bool

@@ -1,0 +1,117 @@
+.team-page-header { padding-bottom: 1.5rem; }
+.team-member-card { border-radius: .85rem; transition: border-color .15s ease, opacity .15s ease; }
+.team-member-inactive { opacity: .66; background: #fafafa; }
+.team-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #20242a;
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.team-avatar-sm { width: 34px; height: 34px; font-size: .7rem; }
+
+.provider-hours-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(180px, 1.2fr) minmax(120px, .8fr) minmax(120px, .8fr);
+  gap: 1rem;
+  align-items: end;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eef0f2;
+}
+.provider-hours-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.schedule-block-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #eef0f2;
+}
+.schedule-block-row:last-child { border-bottom: 0; }
+
+.agenda-page-header { padding-bottom: 1.5rem; }
+.agenda-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+.agenda-provider-column {
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--app-border);
+  border-radius: .9rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .025);
+}
+.agenda-provider-header { padding: 1rem 1.1rem; border-bottom: 1px solid #eef0f2; background: #fafbfc; }
+.agenda-provider-body { min-height: 150px; padding: .65rem; }
+.agenda-appointment-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: .8rem;
+  padding: .85rem;
+  margin-bottom: .55rem;
+  border: 1px solid #e8ebef;
+  border-radius: .75rem;
+  background: #fff;
+  color: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.agenda-appointment-card:last-child { margin-bottom: 0; }
+.agenda-appointment-card:hover { border-color: #cdd2d9; box-shadow: 0 6px 18px rgba(15, 23, 42, .045); }
+.agenda-appointment-time { display: flex; flex-direction: column; padding-top: .05rem; line-height: 1.1; }
+.agenda-appointment-time strong { color: #17191c; font-size: .9rem; }
+.agenda-appointment-time span { margin-top: .25rem; color: var(--app-muted); font-size: .7rem; }
+.agenda-appointment-content { min-width: 0; }
+.agenda-empty-column {
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  color: #9aa1aa;
+  font-size: .78rem;
+}
+.agenda-empty-column i { font-size: 1.25rem; }
+
+.status-no_show { background: #f2edf7; color: #68438a; }
+.appointment-actions-menu { min-width: 205px; }
+.appointment-actions-menu form { margin: 0; }
+.appointment-actions-menu .dropdown-item { font-size: .86rem; }
+.appointments-table td { vertical-align: middle; }
+
+.appointment-summary-list { display: grid; gap: .8rem; }
+.appointment-summary-list > div { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: .8rem; border-bottom: 1px solid #eef0f2; }
+.appointment-summary-list > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.appointment-summary-list span { color: var(--app-muted); font-size: .78rem; }
+.appointment-summary-list strong { text-align: right; font-size: .82rem; }
+.appointment-history-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: .7rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #eef0f2;
+}
+.appointment-history-row:last-child { border-bottom: 0; }
+.appointment-history-dot { width: 8px; height: 8px; margin-top: .3rem; border-radius: 50%; background: #6b7280; }
+
+@media (max-width: 991.98px) {
+  .provider-hours-row { grid-template-columns: 1fr 1fr; }
+  .provider-hours-row > :first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 575.98px) {
+  .provider-hours-row { grid-template-columns: 1fr; }
+  .provider-hours-row > :first-child { grid-column: auto; }
+  .agenda-board { grid-template-columns: 1fr; }
+  .appointment-summary-list > div { flex-direction: column; gap: .2rem; }
+  .appointment-summary-list strong { text-align: left; }
+}
