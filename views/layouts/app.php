@@ -21,6 +21,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <link href="<?= e(url('/assets/css/experience.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/operations.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/crm.css')) ?>" rel="stylesheet">
+  <link href="<?= e(url('/assets/css/management.css')) ?>" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
@@ -36,6 +37,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
             <a class="nav-link" href="<?= e(url('/painel/agenda')) ?>">Agenda</a>
             <a class="nav-link" href="<?= e(url('/painel/clientes')) ?>">Clientes</a>
             <a class="nav-link" href="<?= e(url('/painel/lista-espera')) ?>">Espera</a>
+            <a class="nav-link" href="<?= e(url('/painel/notificacoes')) ?>">Notificações</a>
           <?php endif; ?>
           <a class="nav-link" href="<?= e(url('/painel/agendamentos')) ?>">Agendamentos</a>
 
@@ -43,11 +45,13 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
             <div class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">Gestão</a>
               <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="<?= e(url('/painel/indicadores')) ?>"><i class="bi bi-bar-chart me-2"></i>Indicadores</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/equipe')) ?>"><i class="bi bi-people me-2"></i>Equipe</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/servicos')) ?>"><i class="bi bi-scissors me-2"></i>Serviços</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/horarios')) ?>"><i class="bi bi-clock me-2"></i>Funcionamento</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/configuracoes/agendamento')) ?>"><i class="bi bi-sliders me-2"></i>Regras de agendamento</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/painel/notificacoes')) ?>"><i class="bi bi-chat-dots me-2"></i>Comunicação</a></li>
               </ul>
             </div>
           <?php endif; ?>
