@@ -207,9 +207,25 @@
 .booking-summary span { margin-top: .1rem; color: var(--app-muted); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .booking-summary > strong { flex: 0 0 auto; font-size: .88rem; }
 
+.establishment-map-preview,
+.public-establishment-map {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  background: #eef1f4;
+}
+.establishment-map-preview { height: 280px; border-radius: .85rem; overflow: hidden; border: 1px solid var(--app-border); }
+.public-location-section .card { border-radius: 1rem; }
+.public-location-copy { display: flex; flex-direction: column; justify-content: center; min-height: 320px; }
+.public-establishment-map { min-height: 360px; height: 100%; }
+.leaflet-container { font-family: inherit; }
+.leaflet-control-attribution { font-size: 10px; }
+
 @media (max-width: 991.98px) {
   .public-establishment-header { padding-top: 2.25rem; }
   .public-booking-card { position: static !important; }
+  .public-location-copy { min-height: auto; }
+  .public-establishment-map { min-height: 300px; }
 }
 
 @media (max-width: 575.98px) {
@@ -218,4 +234,6 @@
   .public-service-select { font-size: .7rem; }
   .booking-date-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .booking-date-option:nth-child(n+5) { display: none; }
+  .establishment-map-preview { height: 230px; }
+  .public-establishment-map { min-height: 260px; }
 }
