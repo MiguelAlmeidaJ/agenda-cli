@@ -65,6 +65,16 @@ php database/seed.php
 
 > Em produção, não execute o seed de demonstração.
 
+## Atualizações de banco
+
+Para instalações que já possuem o banco criado, aplique as migrations novas da pasta `database/migrations/`.
+
+A gestão de feriados, fechamentos e horários excepcionais requer:
+
+```bash
+mysql -u usuario -p banco < database/migrations/2026_09_15_create_special_hours.sql
+```
+
 ### Apache
 
 Configure o VirtualHost para que o `DocumentRoot` aponte para a pasta `public/` do projeto. Exemplo:
@@ -97,6 +107,15 @@ Depois do seed, use estas contas apenas no ambiente local/desenvolvimento:
 ## Multi-tenancy
 
 O tenant é o **estabelecimento**. Dados operacionais carregam `establishment_id`, e as consultas de painel sempre aplicam o estabelecimento do usuário autenticado. Admin é o único perfil com visão global.
+
+## Regras de agenda
+
+- Um profissional pode realizar mais de um serviço, mas nunca pode receber agendamentos sobrepostos.
+- O horário semanal define o funcionamento normal.
+- Uma data especial sobrescreve o horário semanal apenas naquela data.
+- Feriados nacionais ficam fechados por padrão e podem ser configurados para abrir em horário especial.
+- Feriados estaduais, municipais e outras datas podem ser adicionados manualmente.
+- Fechamentos emergenciais bloqueiam novos horários, sem cancelar automaticamente agendamentos já existentes.
 
 ## Próximos passos sugeridos
 
