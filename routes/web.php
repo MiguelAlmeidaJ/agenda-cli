@@ -10,6 +10,8 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingSettingsController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\ManagementController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\TeamController;
@@ -31,8 +33,13 @@ $router->post('/logout', [AuthController::class, 'logout']);
 
 $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/agenda', [AgendaController::class, 'index']);
+$router->get('/painel/indicadores', [ManagementController::class, 'index']);
 $router->get('/painel/lista-espera', [WaitlistController::class, 'index']);
+$router->post('/painel/lista-espera/verificar', [WaitlistController::class, 'scan']);
 $router->post('/painel/lista-espera/{id}/status', [WaitlistController::class, 'status']);
+$router->get('/painel/notificacoes', [NotificationController::class, 'index']);
+$router->post('/painel/notificacoes/configuracoes', [NotificationController::class, 'storeSettings']);
+$router->post('/painel/notificacoes/{id}/enviada', [NotificationController::class, 'markSent']);
 
 $router->get('/painel/clientes', [CustomerController::class, 'index']);
 $router->post('/painel/clientes', [CustomerController::class, 'store']);
