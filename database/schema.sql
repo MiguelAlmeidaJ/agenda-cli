@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('admin','owner','employee','client') NOT NULL,
     phone VARCHAR(30) NULL,
+    avatar_url VARCHAR(700) NULL,
+    avatar_public_id VARCHAR(255) NULL,
     status ENUM('active','inactive') NOT NULL DEFAULT 'active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -16,6 +18,10 @@ CREATE TABLE IF NOT EXISTS establishments (
     name VARCHAR(150) NOT NULL,
     slug VARCHAR(170) NOT NULL UNIQUE,
     description TEXT NULL,
+    logo_url VARCHAR(700) NULL,
+    logo_public_id VARCHAR(255) NULL,
+    cover_url VARCHAR(700) NULL,
+    cover_public_id VARCHAR(255) NULL,
     phone VARCHAR(30) NULL,
     email VARCHAR(190) NULL,
     address_line VARCHAR(190) NULL,
@@ -64,6 +70,8 @@ CREATE TABLE IF NOT EXISTS services (
     establishment_id BIGINT UNSIGNED NOT NULL,
     name VARCHAR(120) NOT NULL,
     description TEXT NULL,
+    image_url VARCHAR(700) NULL,
+    image_public_id VARCHAR(255) NULL,
     duration_minutes SMALLINT UNSIGNED NOT NULL,
     price DECIMAL(10,2) NOT NULL DEFAULT 0,
     active TINYINT(1) NOT NULL DEFAULT 1,
@@ -273,4 +281,16 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
     CONSTRAINT fk_notification_outbox_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     CONSTRAINT fk_notification_outbox_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE,
     CONSTRAINT fk_notification_outbox_waitlist FOREIGN KEY (waitlist_entry_id) REFERENCES waitlist_entries(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS media_cleanup_queue (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    public_id VARCHAR(255) NOT NULL,
+    attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    last_error VARCHAR(255) NULL,
+    next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_media_cleanup_public_id (public_id),
+    KEY idx_media_cleanup_pending (next_attempt_at, attempts)
 ) ENGINE=InnoDB;
