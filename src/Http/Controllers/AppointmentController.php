@@ -81,19 +81,27 @@ final class AppointmentController
             return;
         }
 
-        $providers = $pdo->prepare(
-            'SELECT u.id, u.name FROM employee_services es '
-            . 'JOIN users u ON u.id = es.employee_user_id '
-            . 'JOIN establishments e ON e.id = :establishment '
-            . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
-            . 'WHERE es.service_id = :service AND u.status = "active" '
-            . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) '
-            . 'ORDER BY u.name'
-        );
-        $providers->execute([
-            'establishment' => $establishmentId,
-            'service' => $appointment['service_id'],
-        ]);
+        if (Auth::role() === 'employee') {
+            $providers = $pdo->prepare(
+                'SELECT u.id, u.name FROM employee_services es JOIN users u ON u.id = es.employee_user_id '
+                . 'WHERE es.service_id = :service AND u.id = :user AND u.status = "active" LIMIT 1'
+            );
+            $providers->execute(['service' => $appointment['service_id'], 'user' => Auth::id()]);
+        } else {
+            $providers = $pdo->prepare(
+                'SELECT u.id, u.name FROM employee_services es '
+                . 'JOIN users u ON u.id = es.employee_user_id '
+                . 'JOIN establishments e ON e.id = :establishment '
+                . 'LEFT JOIN establishment_users eu ON eu.establishment_id = e.id AND eu.user_id = u.id '
+                . 'WHERE es.service_id = :service AND u.status = "active" '
+                . 'AND (u.id = e.owner_user_id OR (eu.role = "employee" AND eu.active = 1)) '
+                . 'ORDER BY u.name'
+            );
+            $providers->execute([
+                'establishment' => $establishmentId,
+                'service' => $appointment['service_id'],
+            ]);
+        }
 
         $events = $pdo->prepare(
             'SELECT ae.*, u.name AS user_name FROM appointment_events ae '
@@ -125,6 +133,11 @@ final class AppointmentController
         $appointment = $this->findForActor($pdo, $establishmentId, $appointmentId);
         if (!$appointment || $employeeId <= 0 || $date === '') {
             http_response_code(422);
+            echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        if (Auth::role() === 'employee' && $employeeId !== (int) Auth::id()) {
+            http_response_code(403);
             echo json_encode(['slots' => []], JSON_UNESCAPED_UNICODE);
             return;
         }
@@ -162,6 +175,15 @@ final class AppointmentController
             }
             if ($employeeId <= 0 || $date === '' || $time === '') {
                 throw new \RuntimeException('Selecione profissional, data e horário.');
+            }
+            if (Auth::role() === 'employee' && $employeeId !== (int) Auth::id()) {
+                throw new \RuntimeException('Você só pode reagendar atendimentos para a sua própria agenda.');
+            }
+
+            $providerLock = $pdo->prepare('SELECT id FROM users WHERE id = :provider AND status = "active" FOR UPDATE');
+            $providerLock->execute(['provider' => $employeeId]);
+            if (!$providerLock->fetchColumn()) {
+                throw new \RuntimeException('Profissional indisponível.');
             }
 
             $slots = (new AvailabilityService())->slots(
