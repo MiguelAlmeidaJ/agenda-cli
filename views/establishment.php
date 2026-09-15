@@ -130,26 +130,24 @@ $hasAddress = !empty($establishment['address_line']) || !empty($establishment['c
 
 <?php if ($hasAddress): ?>
   <section class="public-location-section pb-4">
-    <div class="card overflow-hidden">
-      <div class="row g-0 align-items-stretch">
-        <div class="col-lg-5">
-          <div class="public-location-copy h-100 p-4 p-xl-5">
+    <div class="card public-location-card overflow-hidden">
+      <div class="card-body public-location-copy p-4 p-xl-5">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-4">
+          <div class="public-location-details">
             <div class="small text-muted-app mb-1">Onde estamos</div>
             <h2 class="h4 mb-3">Localização</h2>
             <?php if (!empty($establishment['address_line'])): ?><div class="fw-semibold mb-1"><?= e($establishment['address_line']) ?></div><?php endif; ?>
-            <div class="text-muted-app mb-3"><?= e(trim(($establishment['city'] ?? '') . ' - ' . ($establishment['state'] ?? ''), ' -')) ?></div>
-            <?php if (!empty($establishment['postal_code'])): ?><div class="small text-muted-app mb-3">CEP <?= e($establishment['postal_code']) ?></div><?php endif; ?>
-            <?php if ($hasMap): ?>
-              <a class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=<?= e($establishment['latitude']) ?>&amp;mlon=<?= e($establishment['longitude']) ?>#map=17/<?= e($establishment['latitude']) ?>/<?= e($establishment['longitude']) ?>"><i class="bi bi-box-arrow-up-right me-2"></i>Abrir mapa</a>
-            <?php endif; ?>
+            <div class="text-muted-app"><?= e(trim(($establishment['city'] ?? '') . ' - ' . ($establishment['state'] ?? ''), ' -')) ?></div>
+            <?php if (!empty($establishment['postal_code'])): ?><div class="small text-muted-app mt-2">CEP <?= e($establishment['postal_code']) ?></div><?php endif; ?>
           </div>
+          <?php if ($hasMap): ?>
+            <a class="btn btn-outline-dark flex-shrink-0" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=<?= e($establishment['latitude']) ?>&amp;mlon=<?= e($establishment['longitude']) ?>#map=17/<?= e($establishment['latitude']) ?>/<?= e($establishment['longitude']) ?>"><i class="bi bi-box-arrow-up-right me-2"></i>Abrir mapa</a>
+          <?php endif; ?>
         </div>
-        <?php if ($hasMap): ?>
-          <div class="col-lg-7">
-            <div class="public-establishment-map" data-establishment-map data-latitude="<?= e($establishment['latitude']) ?>" data-longitude="<?= e($establishment['longitude']) ?>" data-name="<?= e($establishment['name']) ?>" data-zoom="16"></div>
-          </div>
-        <?php endif; ?>
       </div>
+      <?php if ($hasMap): ?>
+        <div class="public-establishment-map" data-establishment-map data-latitude="<?= e($establishment['latitude']) ?>" data-longitude="<?= e($establishment['longitude']) ?>" data-name="<?= e($establishment['name']) ?>" data-zoom="16"></div>
+      <?php endif; ?>
     </div>
   </section>
 <?php endif; ?>
