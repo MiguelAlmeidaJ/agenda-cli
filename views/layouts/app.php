@@ -22,6 +22,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <link href="<?= e(url('/assets/css/operations.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/crm.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/management.css')) ?>" rel="stylesheet">
+  <link href="<?= e(url('/assets/css/media.css')) ?>" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
@@ -49,6 +50,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
                 <li><a class="dropdown-item" href="<?= e(url('/painel/equipe')) ?>"><i class="bi bi-people me-2"></i>Equipe</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/servicos')) ?>"><i class="bi bi-scissors me-2"></i>Serviços</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/horarios')) ?>"><i class="bi bi-clock me-2"></i>Funcionamento</a></li>
+                <li><a class="dropdown-item" href="<?= e(url('/painel/aparencia')) ?>"><i class="bi bi-images me-2"></i>Aparência</a></li>
                 <li><hr class="dropdown-divider"></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/configuracoes/agendamento')) ?>"><i class="bi bi-sliders me-2"></i>Regras de agendamento</a></li>
                 <li><a class="dropdown-item" href="<?= e(url('/painel/notificacoes')) ?>"><i class="bi bi-chat-dots me-2"></i>Comunicação</a></li>
@@ -58,12 +60,20 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
 
           <div class="nav-item dropdown ms-lg-2">
             <button class="btn btn-light btn-sm account-menu" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-              <span class="account-avatar"><?= e(strtoupper(substr((string) $firstName, 0, 1))) ?></span>
+              <span class="account-avatar">
+                <?php if (!empty($user['avatar_url'])): ?>
+                  <img src="<?= e(cloudinary_image_url((string) $user['avatar_url'], 'c_fill,w_64,h_64,g_face,q_auto,f_auto')) ?>" alt="">
+                <?php else: ?>
+                  <?= e(strtoupper(substr((string) $firstName, 0, 1))) ?>
+                <?php endif; ?>
+              </span>
               <span><?= e($firstName) ?></span>
               <i class="bi bi-chevron-down small"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end account-dropdown">
               <li class="px-3 py-2"><div class="small fw-semibold"><?= e($user['name']) ?></div><div class="small text-muted-app"><?= e($user['email']) ?></div></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="<?= e(url('/painel/perfil')) ?>"><i class="bi bi-person-circle me-2"></i>Meu perfil</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><form method="post" action="<?= e(url('/logout')) ?>"><?= Csrf::field() ?><button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right me-2"></i>Sair</button></form></li>
             </ul>
