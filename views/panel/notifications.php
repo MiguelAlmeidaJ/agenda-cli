@@ -6,7 +6,10 @@ $eventLabels = ['appointment_confirmation'=>'Confirmação','appointment_cancell
 <section class="page-header">
   <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
     <div><div class="small text-muted-app mb-1">Comunicação</div><h1 class="h3 mb-1">Notificações</h1><p class="text-muted-app mb-0">Mensagens preparadas para clientes e futura integração automática com WhatsApp.</p></div>
-    <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/painel/indicadores')) ?>"><i class="bi bi-bar-chart me-2"></i>Indicadores</a>
+    <div class="d-flex flex-wrap gap-2">
+      <form method="post" action="<?= e(url('/painel/notificacoes/preparar')) ?>"><?= Csrf::field() ?><button class="btn btn-dark btn-sm" type="submit"><i class="bi bi-arrow-repeat me-2"></i>Preparar agora</button></form>
+      <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/painel/indicadores')) ?>"><i class="bi bi-bar-chart me-2"></i>Indicadores</a>
+    </div>
   </div>
 </section>
 
