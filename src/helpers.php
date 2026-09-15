@@ -60,6 +60,17 @@ function url(string $path = ''): string
     return $base . '/' . ltrim($path, '/');
 }
 
+function cloudinary_image_url(?string $url, string $transformation = ''): string
+{
+    $url = trim((string) $url);
+    $transformation = trim($transformation, '/');
+    if ($url === '' || $transformation === '' || !str_contains($url, '/image/upload/')) {
+        return $url;
+    }
+
+    return str_replace('/image/upload/', '/image/upload/' . $transformation . '/', $url);
+}
+
 function redirect(string $path): never
 {
     header('Location: ' . url($path));
