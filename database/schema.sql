@@ -28,9 +28,18 @@ CREATE TABLE IF NOT EXISTS establishments (
     cover_public_id VARCHAR(255) NULL,
     phone VARCHAR(30) NULL,
     email VARCHAR(190) NULL,
+    postal_code VARCHAR(10) NULL,
+    street VARCHAR(150) NULL,
+    address_number VARCHAR(30) NULL,
+    complement VARCHAR(100) NULL,
+    neighborhood VARCHAR(100) NULL,
     address_line VARCHAR(190) NULL,
     city VARCHAR(100) NULL,
     state CHAR(2) NULL,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+    geocoded_at DATETIME NULL,
+    geocoding_provider VARCHAR(40) NULL,
     timezone VARCHAR(64) NOT NULL DEFAULT 'America/Sao_Paulo',
     active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -297,4 +306,16 @@ CREATE TABLE IF NOT EXISTS media_cleanup_queue (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_media_cleanup_public_id (public_id),
     KEY idx_media_cleanup_pending (next_attempt_at, attempts)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS geocoding_cache (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    provider VARCHAR(40) NOT NULL,
+    query_hash CHAR(64) NOT NULL,
+    query_text VARCHAR(500) NOT NULL,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+    found TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_geocoding_cache_provider_query (provider, query_hash)
 ) ENGINE=InnoDB;
