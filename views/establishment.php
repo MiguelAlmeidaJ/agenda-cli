@@ -21,6 +21,8 @@ for ($i = 0; $i < 7; $i++) {
 }
 
 $user = Auth::user();
+$hasMap = $establishment['latitude'] !== null && $establishment['longitude'] !== null;
+$hasAddress = !empty($establishment['address_line']) || !empty($establishment['city']) || !empty($establishment['state']);
 ?>
 <?php if (!empty($establishment['cover_url'])): ?>
   <div class="public-establishment-cover">
@@ -33,7 +35,7 @@ $user = Auth::user();
   <div class="row g-4 mt-2 align-items-end">
     <div class="col-lg-8">
       <?php if (!empty($establishment['logo_url'])): ?>
-        <div class="public-establishment-logo"><img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fill,w_220,h_220,q_auto,f_auto')) ?>" alt="Logo de <?= e($establishment['name']) ?>"></div>
+        <div class="public-establishment-logo"><img src="<?= e(cloudinary_image_url($establishment['logo_url'], 'c_fit,w_220,h_220,q_auto,f_auto')) ?>" alt="Logo de <?= e($establishment['name']) ?>"></div>
       <?php endif; ?>
       <span class="eyebrow mb-3">Agendamento online</span>
       <h1 class="display-6 fw-bold mb-2"><?= e($establishment['name']) ?></h1>
@@ -41,8 +43,8 @@ $user = Auth::user();
         <p class="lead public-establishment-description mb-3"><?= e($establishment['description']) ?></p>
       <?php endif; ?>
       <div class="d-flex flex-wrap gap-3 small text-muted-app">
-        <?php if ($establishment['address_line']): ?>
-          <span><i class="bi bi-geo-alt me-1"></i><?= e($establishment['address_line']) ?>, <?= e($establishment['city']) ?> - <?= e($establishment['state']) ?></span>
+        <?php if ($hasAddress): ?>
+          <span><i class="bi bi-geo-alt me-1"></i><?= e($establishment['address_line'] ?: trim(($establishment['city'] ?? '') . ' - ' . ($establishment['state'] ?? ''), ' -')) ?><?php if (!empty($establishment['address_line']) && (!empty($establishment['city']) || !empty($establishment['state']))): ?>, <?= e(trim(($establishment['city'] ?? '') . ' - ' . ($establishment['state'] ?? ''), ' -')) ?><?php endif; ?></span>
         <?php endif; ?>
         <span><i class="bi bi-clock me-1"></i>Escolha um horário disponível</span>
       </div>
@@ -125,6 +127,32 @@ $user = Auth::user();
     </div>
   </div>
 </div>
+
+<?php if ($hasAddress): ?>
+  <section class="public-location-section pb-4">
+    <div class="card overflow-hidden">
+      <div class="row g-0 align-items-stretch">
+        <div class="col-lg-5">
+          <div class="public-location-copy h-100 p-4 p-xl-5">
+            <div class="small text-muted-app mb-1">Onde estamos</div>
+            <h2 class="h4 mb-3">Localização</h2>
+            <?php if (!empty($establishment['address_line'])): ?><div class="fw-semibold mb-1"><?= e($establishment['address_line']) ?></div><?php endif; ?>
+            <div class="text-muted-app mb-3"><?= e(trim(($establishment['city'] ?? '') . ' - ' . ($establishment['state'] ?? ''), ' -')) ?></div>
+            <?php if (!empty($establishment['postal_code'])): ?><div class="small text-muted-app mb-3">CEP <?= e($establishment['postal_code']) ?></div><?php endif; ?>
+            <?php if ($hasMap): ?>
+              <a class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=<?= e($establishment['latitude']) ?>&amp;mlon=<?= e($establishment['longitude']) ?>#map=17/<?= e($establishment['latitude']) ?>/<?= e($establishment['longitude']) ?>"><i class="bi bi-box-arrow-up-right me-2"></i>Abrir mapa</a>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php if ($hasMap): ?>
+          <div class="col-lg-7">
+            <div class="public-establishment-map" data-establishment-map data-latitude="<?= e($establishment['latitude']) ?>" data-longitude="<?= e($establishment['longitude']) ?>" data-name="<?= e($establishment['name']) ?>" data-zoom="16"></div>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
+<?php endif; ?>
 
 <script>
 const employeesByService = <?= json_encode($employeesByService, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;

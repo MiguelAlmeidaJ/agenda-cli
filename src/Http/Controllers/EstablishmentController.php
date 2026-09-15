@@ -9,6 +9,7 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\GeocodingService;
 
 final class EstablishmentController
 {
@@ -82,10 +83,11 @@ final class EstablishmentController
             redirect('/admin/estabelecimentos/novo');
         }
         if (!$this->validEstablishmentData($data)) {
-            flash('error', 'Revise os dados de contato, localização e fuso horário.');
+            flash('error', 'Revise os dados de contato, endereço e fuso horário.');
             redirect('/admin/estabelecimentos/novo');
         }
 
+        $location = $this->resolveLocation($data, null);
         $pdo = Database::connection();
         $pdo->beginTransaction();
         try {
@@ -131,8 +133,8 @@ final class EstablishmentController
             $slug = $this->uniqueSlug($pdo, $data['name']);
             $insert = $pdo->prepare(
                 'INSERT INTO establishments '
-                . '(owner_user_id, name, slug, description, phone, email, address_line, city, state, timezone, active) '
-                . 'VALUES (:owner, :name, :slug, :description, :phone, :email, :address, :city, :state, :timezone, :active)'
+                . '(owner_user_id, name, slug, description, phone, email, postal_code, street, address_number, complement, neighborhood, address_line, city, state, latitude, longitude, geocoded_at, geocoding_provider, timezone, active) '
+                . 'VALUES (:owner, :name, :slug, :description, :phone, :email, :postal_code, :street, :address_number, :complement, :neighborhood, :address, :city, :state, :latitude, :longitude, :geocoded_at, :geocoding_provider, :timezone, :active)'
             );
             $insert->execute([
                 'owner' => $ownerId,
@@ -141,9 +143,18 @@ final class EstablishmentController
                 'description' => $data['description'],
                 'phone' => $data['phone'],
                 'email' => $data['email'],
+                'postal_code' => $data['postal_code'],
+                'street' => $data['street'],
+                'address_number' => $data['address_number'],
+                'complement' => $data['complement'],
+                'neighborhood' => $data['neighborhood'],
                 'address' => $data['address_line'],
                 'city' => $data['city'],
                 'state' => $data['state'],
+                'latitude' => $location['latitude'],
+                'longitude' => $location['longitude'],
+                'geocoded_at' => $location['geocoded_at'],
+                'geocoding_provider' => $location['provider'],
                 'timezone' => $data['timezone'],
                 'active' => isset($_POST['active']) ? 1 : 0,
             ]);
@@ -168,7 +179,11 @@ final class EstablishmentController
                 ->execute(['establishment' => $establishmentId]);
 
             $pdo->commit();
-            flash('success', 'Estabelecimento criado. O dono já pode acessar o painel e concluir a configuração.');
+            $message = 'Estabelecimento criado. O dono já pode acessar o painel e concluir a configuração.';
+            if ($location['attempted'] && $location['latitude'] === null) {
+                $message .= ' O endereço foi salvo, mas o mapa ainda não pôde ser localizado automaticamente.';
+            }
+            flash('success', $message);
             redirect('/admin/estabelecimentos/' . $establishmentId . '/editar');
         } catch (\Throwable $exception) {
             if ($pdo->inTransaction()) {
@@ -207,7 +222,8 @@ final class EstablishmentController
         Auth::requireRole(['admin']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = (int) $id;
-        if (!$this->findEstablishment($establishmentId)) {
+        $current = $this->findEstablishment($establishmentId);
+        if (!$current) {
             $this->notFound();
             return;
         }
@@ -218,8 +234,13 @@ final class EstablishmentController
             redirect('/admin/estabelecimentos/' . $establishmentId . '/editar');
         }
 
-        $this->updateEstablishment($establishmentId, $data, isset($_POST['active']) ? 1 : 0);
-        flash('success', 'Estabelecimento atualizado.');
+        $location = $this->resolveLocation($data, $current);
+        $this->updateEstablishment($establishmentId, $data, $location, isset($_POST['active']) ? 1 : 0);
+        $message = 'Estabelecimento atualizado.';
+        if ($location['attempted'] && $location['latitude'] === null) {
+            $message .= ' O endereço foi salvo, mas não conseguimos posicionar o mapa automaticamente.';
+        }
+        flash('success', $message);
         redirect('/admin/estabelecimentos/' . $establishmentId . '/editar');
     }
 
@@ -246,26 +267,47 @@ final class EstablishmentController
         Auth::requireRole(['owner']);
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $data = $this->establishmentData($_POST);
+        $current = $this->findEstablishment($establishmentId);
+        if (!$current) {
+            $this->notFound();
+            return;
+        }
 
+        $data = $this->establishmentData($_POST);
         if (!$this->validEstablishmentData($data)) {
-            flash('error', 'Revise os dados do estabelecimento.');
+            flash('error', 'Revise os dados do estabelecimento. Para exibir o mapa, informe ao menos logradouro, cidade e UF.');
             redirect('/painel/estabelecimento');
         }
 
-        $this->updateEstablishment($establishmentId, $data, null);
-        flash('success', 'Dados do estabelecimento atualizados.');
+        $location = $this->resolveLocation($data, $current);
+        $this->updateEstablishment($establishmentId, $data, $location, null);
+        $message = 'Dados do estabelecimento atualizados.';
+        if ($location['attempted'] && $location['latitude'] === null) {
+            $message .= ' O endereço foi salvo, mas não conseguimos posicionar o mapa automaticamente.';
+        }
+        flash('success', $message);
         redirect('/painel/estabelecimento');
     }
 
     private function establishmentData(array $input): array
     {
+        $postalCode = $this->normalizePostalCode((string) ($input['postal_code'] ?? ''));
+        $street = $this->nullable($this->limit(trim((string) ($input['street'] ?? '')), 150));
+        $number = $this->nullable($this->limit(trim((string) ($input['address_number'] ?? '')), 30));
+        $complement = $this->nullable($this->limit(trim((string) ($input['complement'] ?? '')), 100));
+        $neighborhood = $this->nullable($this->limit(trim((string) ($input['neighborhood'] ?? '')), 100));
+
         return [
             'name' => $this->limit(trim((string) ($input['name'] ?? '')), 150),
             'description' => $this->nullable($this->limit(trim((string) ($input['description'] ?? '')), 3000)),
             'phone' => $this->nullable($this->limit(trim((string) ($input['phone'] ?? '')), 30)),
             'email' => $this->nullable(strtolower($this->limit(trim((string) ($input['email'] ?? '')), 190))),
-            'address_line' => $this->nullable($this->limit(trim((string) ($input['address_line'] ?? '')), 190)),
+            'postal_code' => $postalCode,
+            'street' => $street,
+            'address_number' => $number,
+            'complement' => $complement,
+            'neighborhood' => $neighborhood,
+            'address_line' => $this->buildAddressLine($street, $number, $complement, $neighborhood),
             'city' => $this->nullable($this->limit(trim((string) ($input['city'] ?? '')), 100)),
             'state' => $this->nullable(strtoupper(trim((string) ($input['state'] ?? '')))),
             'timezone' => trim((string) ($input['timezone'] ?? 'America/Sao_Paulo')),
@@ -280,24 +322,55 @@ final class EstablishmentController
         if ($data['email'] !== null && !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             return false;
         }
+        if ($data['postal_code'] !== null && !preg_match('/^\d{5}-\d{3}$/', $data['postal_code'])) {
+            return false;
+        }
         if ($data['state'] !== null && !in_array($data['state'], self::STATES, true)) {
             return false;
         }
-        return array_key_exists($data['timezone'], self::TIMEZONES);
+        if (!array_key_exists($data['timezone'], self::TIMEZONES)) {
+            return false;
+        }
+
+        $hasAddress = $data['postal_code'] !== null
+            || $data['street'] !== null
+            || $data['address_number'] !== null
+            || $data['complement'] !== null
+            || $data['neighborhood'] !== null
+            || $data['city'] !== null
+            || $data['state'] !== null;
+
+        if ($hasAddress && ($data['street'] === null || $data['city'] === null || $data['state'] === null)) {
+            return false;
+        }
+
+        return true;
     }
 
-    private function updateEstablishment(int $id, array $data, ?int $active): void
+    private function updateEstablishment(int $id, array $data, array $location, ?int $active): void
     {
         $sql = 'UPDATE establishments SET name = :name, description = :description, phone = :phone, email = :email, '
-            . 'address_line = :address, city = :city, state = :state, timezone = :timezone';
+            . 'postal_code = :postal_code, street = :street, address_number = :address_number, complement = :complement, '
+            . 'neighborhood = :neighborhood, address_line = :address, city = :city, state = :state, '
+            . 'latitude = :latitude, longitude = :longitude, geocoded_at = :geocoded_at, geocoding_provider = :geocoding_provider, '
+            . 'timezone = :timezone';
         $params = [
             'name' => $data['name'],
             'description' => $data['description'],
             'phone' => $data['phone'],
             'email' => $data['email'],
+            'postal_code' => $data['postal_code'],
+            'street' => $data['street'],
+            'address_number' => $data['address_number'],
+            'complement' => $data['complement'],
+            'neighborhood' => $data['neighborhood'],
             'address' => $data['address_line'],
             'city' => $data['city'],
             'state' => $data['state'],
+            'latitude' => $location['latitude'],
+            'longitude' => $location['longitude'],
+            'geocoded_at' => $location['geocoded_at'],
+            'geocoding_provider' => $location['provider'],
             'timezone' => $data['timezone'],
             'id' => $id,
         ];
@@ -308,6 +381,86 @@ final class EstablishmentController
         $sql .= ' WHERE id = :id';
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute($params);
+    }
+
+    private function resolveLocation(array $data, ?array $current): array
+    {
+        if ($current !== null && !$this->addressChanged($data, $current)) {
+            return [
+                'latitude' => $current['latitude'] !== null ? (float) $current['latitude'] : null,
+                'longitude' => $current['longitude'] !== null ? (float) $current['longitude'] : null,
+                'geocoded_at' => $current['geocoded_at'] ?? null,
+                'provider' => $current['geocoding_provider'] ?? null,
+                'attempted' => false,
+            ];
+        }
+
+        if ($data['street'] === null || $data['city'] === null || $data['state'] === null) {
+            return [
+                'latitude' => null,
+                'longitude' => null,
+                'geocoded_at' => null,
+                'provider' => null,
+                'attempted' => false,
+            ];
+        }
+
+        try {
+            $result = (new GeocodingService())->geocode($data);
+        } catch (\Throwable) {
+            $result = null;
+        }
+
+        return [
+            'latitude' => $result['latitude'] ?? null,
+            'longitude' => $result['longitude'] ?? null,
+            'geocoded_at' => $result !== null ? date('Y-m-d H:i:s') : null,
+            'provider' => $result['provider'] ?? null,
+            'attempted' => true,
+        ];
+    }
+
+    private function addressChanged(array $data, array $current): bool
+    {
+        foreach (['postal_code', 'street', 'address_number', 'neighborhood', 'city', 'state'] as $field) {
+            $before = trim((string) ($current[$field] ?? ''));
+            $after = trim((string) ($data[$field] ?? ''));
+            if ($before !== $after) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function buildAddressLine(?string $street, ?string $number, ?string $complement, ?string $neighborhood): ?string
+    {
+        if ($street === null) {
+            return null;
+        }
+
+        $line = $street;
+        if ($number !== null) {
+            $line .= ', ' . $number;
+        }
+        if ($complement !== null) {
+            $line .= ' - ' . $complement;
+        }
+        if ($neighborhood !== null) {
+            $line .= ' - ' . $neighborhood;
+        }
+        return $this->limit($line, 190);
+    }
+
+    private function normalizePostalCode(string $value): ?string
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+        if (strlen($digits) !== 8) {
+            return $this->limit(trim($value), 10);
+        }
+        return substr($digits, 0, 5) . '-' . substr($digits, 5, 3);
     }
 
     private function findEstablishment(int $id): ?array
