@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use DateTimeImmutable;
+use DateTimeZone;
 
 final class TeamController
 {
@@ -21,7 +22,7 @@ final class TeamController
 
         $ownerStmt = $pdo->prepare(
             'SELECT u.id, u.name, u.email, u.phone, 1 AS active, "owner" AS member_role, '
-            . 'COUNT(DISTINCT es.service_id) AS service_count '
+            . 'COUNT(DISTINCT s.id) AS service_count '
             . 'FROM establishments e JOIN users u ON u.id = e.owner_user_id '
             . 'LEFT JOIN employee_services es ON es.employee_user_id = u.id '
             . 'LEFT JOIN services s ON s.id = es.service_id AND s.establishment_id = e.id '
@@ -79,6 +80,15 @@ final class TeamController
                     throw new \RuntimeException('A conta deste profissional está inativa.');
                 }
                 $userId = (int) $existing['id'];
+
+                $otherTenant = $pdo->prepare(
+                    'SELECT establishment_id FROM establishment_users '
+                    . 'WHERE user_id = :user AND role = "employee" AND establishment_id <> :establishment LIMIT 1'
+                );
+                $otherTenant->execute(['user' => $userId, 'establishment' => $establishmentId]);
+                if ($otherTenant->fetchColumn()) {
+                    throw new \RuntimeException('Este profissional já está vinculado a outro estabelecimento. O suporte a múltiplas unidades será habilitado com o seletor de estabelecimento.');
+                }
             } else {
                 if (strlen($password) < 8) {
                     throw new \RuntimeException('Defina uma senha inicial com pelo menos 8 caracteres.');
@@ -128,8 +138,9 @@ final class TeamController
             . 'WHERE establishment_id = :establishment AND user_id = :user AND role = "employee"'
         );
         $stmt->execute(['establishment' => $establishmentId, 'user' => $userId]);
+        $changed = $stmt->rowCount() > 0;
 
-        flash($stmt->rowCount() ? 'success' : 'error', $stmt->rowCount() ? 'Status do profissional atualizado.' : 'Profissional não encontrado.');
+        flash($changed ? 'success' : 'error', $changed ? 'Status do profissional atualizado.' : 'Profissional não encontrado.');
         redirect('/painel/equipe');
     }
 
@@ -259,9 +270,13 @@ final class TeamController
         $ends = trim((string) ($_POST['ends_at'] ?? ''));
         $reason = trim((string) ($_POST['reason'] ?? ''));
 
+        $timezoneStmt = $pdo->prepare('SELECT timezone FROM establishments WHERE id = :establishment LIMIT 1');
+        $timezoneStmt->execute(['establishment' => $establishmentId]);
+        $timezone = new DateTimeZone((string) ($timezoneStmt->fetchColumn() ?: 'America/Sao_Paulo'));
+
         try {
-            $startAt = new DateTimeImmutable($date . ' ' . $starts);
-            $endAt = new DateTimeImmutable($date . ' ' . $ends);
+            $startAt = new DateTimeImmutable($date . ' ' . $starts, $timezone);
+            $endAt = new DateTimeImmutable($date . ' ' . $ends, $timezone);
         } catch (\Throwable) {
             flash('error', 'Informe uma data e horários válidos.');
             redirect('/painel/equipe/' . $providerId . '/horarios');
