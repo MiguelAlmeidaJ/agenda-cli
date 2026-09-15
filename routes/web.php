@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PanelController;
+use App\Http\Controllers\ScheduleController;
 
 /** @var Router $router */
 $router->get('/', [HomeController::class, 'index']);
@@ -25,6 +26,8 @@ $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/servicos', [PanelController::class, 'services']);
 $router->post('/painel/servicos', [PanelController::class, 'storeService']);
 $router->post('/painel/servicos/{id}', [PanelController::class, 'updateService']);
-$router->get('/painel/horarios', [PanelController::class, 'hours']);
-$router->post('/painel/horarios', [PanelController::class, 'storeHours']);
+$router->get('/painel/horarios', [ScheduleController::class, 'index']);
+$router->post('/painel/horarios', [ScheduleController::class, 'storeWeeklyHours']);
+$router->post('/painel/horarios/especiais', [ScheduleController::class, 'storeSpecialHours']);
+$router->post('/painel/horarios/especiais/{id}/remover', [ScheduleController::class, 'deleteSpecialHours']);
 $router->get('/painel/agendamentos', [PanelController::class, 'appointments']);

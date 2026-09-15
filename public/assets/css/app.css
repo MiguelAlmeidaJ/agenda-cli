@@ -212,10 +212,101 @@ body { background: #f7f8fa; color: #1f2937; }
 .dashboard-tip > i { margin-top: .05rem; }
 .dashboard-tip strong { display: block; margin-bottom: .25rem; font-size: .85rem; color: #343a40; }
 
+.schedule-page-header { padding-bottom: 1.5rem; }
+.schedule-card { overflow: hidden; border-radius: .9rem; }
+.schedule-card-header { padding: 1.2rem 1.4rem; border-bottom-color: var(--app-border); }
+.schedule-note {
+  display: flex;
+  gap: .85rem;
+  align-items: flex-start;
+  padding: 1rem 1.15rem;
+  border: 1px solid #dce2e8;
+  border-radius: .8rem;
+  background: #f2f5f7;
+  color: #4b5563;
+  font-size: .85rem;
+}
+.schedule-note > i { margin-top: .08rem; }
+.schedule-note strong, .schedule-note span { display: block; }
+.schedule-note strong { color: #252a31; margin-bottom: .15rem; }
+.schedule-week-list { padding: 0 1.4rem; }
+.schedule-week-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(150px, 1fr) 130px;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.schedule-week-row:last-child { border-bottom: 0; }
+.schedule-day { display: flex; flex-direction: column; gap: .2rem; }
+.schedule-time-field .form-control { min-height: 40px; }
+.schedule-closed-toggle { padding-top: 1.25rem; }
+.schedule-empty {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--app-muted);
+}
+.schedule-empty > i { font-size: 1.4rem; margin-bottom: .35rem; }
+.schedule-empty strong { color: #343a40; }
+.special-date-list { padding: 0 1.25rem; }
+.special-date-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.special-date-row:last-child { border-bottom: 0; }
+.special-date-calendar {
+  width: 44px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dde2e7;
+  border-radius: .65rem;
+  background: #fafbfc;
+  line-height: 1;
+}
+.special-date-calendar strong { font-size: 1rem; }
+.special-date-calendar span { margin-top: .25rem; font-size: .6rem; color: var(--app-muted); }
+.special-date-content { min-width: 0; }
+.holiday-list { padding: 0 1.25rem; }
+.holiday-row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 120px auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid #edf0f2;
+}
+.holiday-date { display: flex; flex-direction: column; line-height: 1.1; }
+.holiday-date strong { font-size: .92rem; }
+.holiday-date span { margin-top: .2rem; font-size: .7rem; color: var(--app-muted); }
+.holiday-main { min-width: 0; }
+.holiday-status { text-align: right; }
+.holiday-editor { border-bottom: 1px solid #edf0f2; }
+.holiday-editor-inner { margin: 0 0 1rem 70px; padding: 1rem; border-radius: .75rem; background: #f7f8fa; }
+
 @media (max-width: 991.98px) {
   .sales-hero { padding: 4rem 0 3.5rem; }
   .sales-section { padding: 4rem 0; }
   .product-preview { transform: none; }
+  .schedule-week-row { grid-template-columns: 1fr 1fr; }
+  .schedule-day { grid-column: 1 / -1; }
+  .schedule-closed-toggle { padding-top: 0; align-self: end; }
+  .holiday-row { grid-template-columns: 58px minmax(0, 1fr) auto; }
+  .holiday-status { display: none; }
+  .holiday-editor-inner { margin-left: 0; }
 }
 
 @media (max-width: 575.98px) {
@@ -224,4 +315,11 @@ body { background: #f7f8fa; color: #1f2937; }
   .dashboard-header { padding-top: 2rem; }
   .dashboard-appointment { grid-template-columns: 48px minmax(0, 1fr); }
   .dashboard-appointment-price { grid-column: 2; margin-top: -.45rem; }
+  .schedule-week-list, .holiday-list { padding-left: 1rem; padding-right: 1rem; }
+  .schedule-week-row { grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .schedule-closed-toggle { grid-column: 1 / -1; }
+  .holiday-row { grid-template-columns: 50px minmax(0, 1fr); }
+  .holiday-adjust { grid-column: 2; justify-self: start; }
+  .special-date-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .special-date-row form { grid-column: 2; }
 }
