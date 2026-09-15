@@ -19,6 +19,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="<?= e(url('/assets/css/app.css')) ?>" rel="stylesheet">
   <link href="<?= e(url('/assets/css/experience.css')) ?>" rel="stylesheet">
+  <link href="<?= e(url('/assets/css/operations.css')) ?>" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
