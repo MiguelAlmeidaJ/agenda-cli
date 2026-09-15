@@ -19,7 +19,7 @@ final class HomeController
     public function find(): void
     {
         $stmt = Database::connection()->query(
-            'SELECT e.id, e.name, e.slug, e.description, e.city, e.state, '
+            'SELECT e.id, e.name, e.slug, e.description, e.city, e.state, e.logo_url, e.cover_url, '
             . 'COUNT(s.id) AS service_count, MIN(s.price) AS min_price '
             . 'FROM establishments e '
             . 'LEFT JOIN services s ON s.establishment_id = e.id AND s.active = 1 '
@@ -50,7 +50,7 @@ final class HomeController
         $serviceRows = $services->fetchAll();
 
         $providers = $pdo->prepare(
-            'SELECT u.id, u.name, es.service_id, '
+            'SELECT u.id, u.name, u.avatar_url, es.service_id, '
             . 'CASE WHEN u.id = e.owner_user_id THEN "owner" ELSE "employee" END AS provider_role '
             . 'FROM employee_services es '
             . 'JOIN services s ON s.id = es.service_id '
@@ -69,6 +69,9 @@ final class HomeController
                 'id' => (int) $provider['id'],
                 'name' => $provider['name'],
                 'role' => $provider['provider_role'],
+                'avatar_url' => !empty($provider['avatar_url'])
+                    ? cloudinary_image_url((string) $provider['avatar_url'], 'c_fill,w_96,h_96,g_face,q_auto,f_auto')
+                    : null,
             ];
         }
 
