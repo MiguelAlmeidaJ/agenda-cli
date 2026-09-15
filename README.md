@@ -29,6 +29,17 @@ docker compose exec app php database/seed.php
 
 Acesse `http://localhost:8080`.
 
+## Contas de demonstração
+
+Depois do seed, use estas contas apenas no ambiente local:
+
+| Perfil | E-mail | Senha |
+| --- | --- | --- |
+| Admin | `admin@agenda.local` | `Admin@123` |
+| Dono | `dono@agenda.local` | `Dono@123` |
+| Funcionário | `funcionario@agenda.local` | `Func@123` |
+| Cliente | `cliente@agenda.local` | `Cliente@123` |
+
 ## Multi-tenancy
 
 O tenant é o **estabelecimento**. Dados operacionais carregam `establishment_id`, e as consultas de painel sempre aplicam o estabelecimento do usuário autenticado. Admin é o único perfil com visão global.
