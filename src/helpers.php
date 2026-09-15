@@ -68,6 +68,10 @@ function cloudinary_image_url(?string $url, string $transformation = ''): string
         return $url;
     }
 
+    if (str_contains($url, '/logo/') && str_starts_with($transformation, 'c_fill,')) {
+        $transformation = 'c_fit,' . substr($transformation, strlen('c_fill,'));
+    }
+
     return str_replace('/image/upload/', '/image/upload/' . $transformation . '/', $url);
 }
 
