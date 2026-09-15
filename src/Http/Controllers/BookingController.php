@@ -119,6 +119,18 @@ final class BookingController
                 'price' => $service['price'],
                 'notes' => $notes !== '' ? $notes : null,
             ]);
+            $appointmentId = (int) $pdo->lastInsertId();
+
+            $event = $pdo->prepare(
+                'INSERT INTO appointment_events (appointment_id, establishment_id, user_id, event_type, to_status, details) '
+                . 'VALUES (:appointment, :establishment, :user, "created", "confirmed", :details)'
+            );
+            $event->execute([
+                'appointment' => $appointmentId,
+                'establishment' => $establishment['id'],
+                'user' => Auth::id(),
+                'details' => 'Agendamento criado pelo cliente.',
+            ]);
 
             $pdo->commit();
             flash('success', 'Agendamento confirmado com sucesso.');
