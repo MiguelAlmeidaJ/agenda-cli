@@ -30,19 +30,47 @@
   const attribution = config.attribution || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
   document.querySelectorAll('[data-establishment-map]').forEach((element) => {
+    if (element.dataset.mapInitialized === '1') return;
+
     const latitude = Number(element.dataset.latitude);
     const longitude = Number(element.dataset.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
 
+    element.dataset.mapInitialized = '1';
+
     const zoom = Number(element.dataset.zoom || 16);
     const name = element.dataset.name || 'Estabelecimento';
-    const map = L.map(element, { scrollWheelZoom: false }).setView([latitude, longitude], zoom);
+    const map = L.map(element, {
+      scrollWheelZoom: false,
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([latitude, longitude], zoom);
 
     L.tileLayer(tileUrl, {
+      minZoom: 2,
       maxZoom: 19,
       attribution,
+      keepBuffer: 3,
+      updateWhenIdle: false,
     }).addTo(map);
 
     L.marker([latitude, longitude]).addTo(map).bindPopup(name);
+
+    const refreshSize = () => {
+      if (!element.isConnected || element.clientWidth === 0 || element.clientHeight === 0) return;
+      map.invalidateSize({animate: false, pan: false});
+    };
+
+    requestAnimationFrame(() => requestAnimationFrame(refreshSize));
+    setTimeout(refreshSize, 120);
+    setTimeout(refreshSize, 400);
+
+    if ('ResizeObserver' in window) {
+      const observer = new ResizeObserver(() => refreshSize());
+      observer.observe(element);
+    }
+
+    window.addEventListener('load', refreshSize, {once: true});
+    window.addEventListener('resize', refreshSize, {passive: true});
   });
 })();
