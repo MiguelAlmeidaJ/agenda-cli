@@ -62,28 +62,51 @@ $days = [
         <?php foreach ($days as $weekday => $label):
           $row = $hours[$weekday] ?? null;
           $closed = $row ? (int) $row['is_closed'] === 1 : $weekday === 7;
-          $opens = $row['opens_at'] ?? '09:00:00';
-          $closes = $row['closes_at'] ?? ($weekday === 6 ? '14:00:00' : '18:00:00');
+          $ranges = $hourRanges[$weekday] ?? [];
+          if (!$closed && $ranges === []) {
+              $ranges = [[
+                  'opens_at' => '09:00',
+                  'closes_at' => $weekday === 6 ? '14:00' : '18:00',
+              ]];
+          }
+          $summary = $closed
+              ? 'Fechado'
+              : implode(' / ', array_map(
+                  static fn (array $range): string => substr((string) $range['opens_at'], 0, 5) . '–' . substr((string) $range['closes_at'], 0, 5),
+                  $ranges
+              ));
         ?>
-          <div class="schedule-week-row" data-week-row>
-            <div class="schedule-day">
-              <strong><?= e($label) ?></strong>
-              <span class="small text-muted-app schedule-day-summary">
-                <?= $closed ? 'Fechado' : e(substr((string) $opens, 0, 5) . ' às ' . substr((string) $closes, 0, 5)) ?>
-              </span>
-            </div>
-            <div class="schedule-time-field">
-              <label class="form-label small text-muted-app mb-1">Abre</label>
-              <input class="form-control" type="time" name="opens[<?= $weekday ?>]" value="<?= e(substr((string) $opens, 0, 5)) ?>" <?= $closed ? 'disabled' : '' ?> data-time-input>
-            </div>
-            <div class="schedule-time-field">
-              <label class="form-label small text-muted-app mb-1">Fecha</label>
-              <input class="form-control" type="time" name="closes[<?= $weekday ?>]" value="<?= e(substr((string) $closes, 0, 5)) ?>" <?= $closed ? 'disabled' : '' ?> data-time-input>
-            </div>
-            <div class="schedule-closed-toggle">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="closed[<?= $weekday ?>]" id="closed-<?= $weekday ?>" <?= $closed ? 'checked' : '' ?> data-closed-toggle>
-                <label class="form-check-label small" for="closed-<?= $weekday ?>">Fechado</label>
+          <div class="p-4 border-bottom" data-week-row data-day="<?= $weekday ?>">
+            <div class="d-flex flex-column flex-xl-row justify-content-between gap-3">
+              <div style="min-width: 180px">
+                <strong><?= e($label) ?></strong>
+                <div class="small text-muted-app mt-1" data-day-summary><?= e($summary) ?></div>
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input" type="checkbox" name="closed[<?= $weekday ?>]" id="closed-<?= $weekday ?>" <?= $closed ? 'checked' : '' ?> data-closed-toggle>
+                  <label class="form-check-label small" for="closed-<?= $weekday ?>">Fechado</label>
+                </div>
+              </div>
+
+              <div class="flex-grow-1">
+                <div class="d-grid gap-2" data-range-list="<?= $weekday ?>">
+                  <?php foreach ($ranges as $index => $range): ?>
+                    <div class="row g-2 align-items-end" data-range-row>
+                      <div class="col-sm-5">
+                        <label class="form-label small text-muted-app mb-1">Abre</label>
+                        <input class="form-control" type="time" name="ranges[<?= $weekday ?>][<?= $index ?>][opens]" value="<?= e(substr((string) $range['opens_at'], 0, 5)) ?>" <?= $closed ? 'disabled' : '' ?> data-range-open>
+                      </div>
+                      <div class="col-sm-5">
+                        <label class="form-label small text-muted-app mb-1">Fecha</label>
+                        <input class="form-control" type="time" name="ranges[<?= $weekday ?>][<?= $index ?>][closes]" value="<?= e(substr((string) $range['closes_at'], 0, 5)) ?>" <?= $closed ? 'disabled' : '' ?> data-range-close>
+                      </div>
+                      <div class="col-sm-2">
+                        <button class="btn btn-outline-danger w-100" type="button" data-remove-range <?= $closed ? 'disabled' : '' ?> title="Remover faixa"><i class="bi bi-trash"></i></button>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary mt-2" type="button" data-add-range="<?= $weekday ?>" <?= $closed ? 'disabled' : '' ?>><i class="bi bi-plus-lg me-1"></i>Adicionar faixa</button>
+                <div class="form-text">Ex.: 08:00–12:00 e 14:00–18:00 para criar uma pausa recorrente.</div>
               </div>
             </div>
           </div>
