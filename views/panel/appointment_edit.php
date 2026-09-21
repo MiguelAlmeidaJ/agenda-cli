@@ -85,9 +85,31 @@ $canReschedule = in_array($appointment['status'], ['pending', 'confirmed'], true
           <?php if (!empty($appointment['attendance_responded_at'])): ?>
             <div><span>Respondido em</span><strong><?= e(date('d/m/Y H:i', strtotime((string) $appointment['attendance_responded_at']))) ?></strong></div>
           <?php endif; ?>
+          <?php if (!empty($appointment['series_id'])): ?>
+            <div>
+              <span>Recorrência</span>
+              <strong>
+                <?= (int) $appointment['series_position'] ?>/<?= (int) $appointment['series_occurrences_count'] ?>
+                · a cada <?= (int) $appointment['series_interval_weeks'] ?> semana<?= (int) $appointment['series_interval_weeks'] === 1 ? '' : 's' ?>
+              </strong>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
     </div>
+
+    <?php if (!empty($appointment['series_id']) && in_array($appointment['status'], ['pending', 'confirmed'], true)): ?>
+      <div class="card mb-4">
+        <div class="card-body p-4">
+          <h2 class="h6 mb-2"><i class="bi bi-arrow-repeat me-2"></i>Agendamento recorrente</h2>
+          <p class="small text-muted-app mb-3">Este atendimento pertence a uma série. Você pode reagendar apenas esta ocorrência normalmente ou cancelar esta e todas as próximas de uma vez.</p>
+          <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/serie/cancelar-futuros')) ?>" onsubmit="return confirm('Cancelar esta ocorrência e todas as próximas ocorrências ativas desta série?')">
+            <?= Csrf::field() ?>
+            <button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-calendar-x me-2"></i>Cancelar esta e as próximas</button>
+          </form>
+        </div>
+      </div>
+    <?php endif; ?>
 
     <div class="card">
       <div class="card-header bg-white p-4 border-bottom">
