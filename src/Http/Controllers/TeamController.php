@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\EstablishmentClock;
+use App\Services\ProviderAbsenceService;
 use App\Services\ScheduleRangeService;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -241,6 +242,24 @@ final class TeamController
             'now' => $clock->sql($now),
         ]);
 
+        $absences = [];
+        try {
+            $absenceStmt = $pdo->prepare(
+                'SELECT * FROM provider_absences '
+                . 'WHERE establishment_id=:establishment AND user_id=:provider '
+                . 'AND (ends_on IS NULL OR ends_on>=:today) '
+                . 'ORDER BY CASE kind WHEN "date_range" THEN 0 ELSE 1 END,starts_on,weekday,id LIMIT 80'
+            );
+            $absenceStmt->execute([
+                'establishment' => $establishmentId,
+                'provider' => $providerId,
+                'today' => $now->format('Y-m-d'),
+            ]);
+            $absences = $absenceStmt->fetchAll();
+        } catch (\PDOException) {
+            // Compatibilidade enquanto a migration de ausências ainda não foi aplicada.
+        }
+
         View::render('panel/team_schedule', [
             'title' => 'Horários de ' . $provider['name'],
             'provider' => $provider,
@@ -249,6 +268,7 @@ final class TeamController
             'businessHours' => $businessHours,
             'businessHourRanges' => $businessHourRanges,
             'blocks' => $blocks->fetchAll(),
+            'absences' => $absences,
             'today' => $now->format('Y-m-d'),
         ]);
     }
@@ -357,6 +377,101 @@ final class TeamController
         redirect('/painel/equipe/' . $providerId . '/horarios');
     }
 
+    public function storeAbsence(string $id): void
+    {
+        Auth::requireRole(['owner']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $providerId = (int) $id;
+        $pdo = Database::connection();
+
+        if (!$this->provider($pdo, $establishmentId, $providerId)) {
+            flash('error', 'Profissional não encontrado.');
+            redirect('/painel/equipe');
+        }
+
+        $clock = new EstablishmentClock();
+        $today = $clock->now($pdo, $establishmentId)->format('Y-m-d');
+        $service = new ProviderAbsenceService();
+        $type = (string) ($_POST['absence_type'] ?? '');
+
+        try {
+            if ($type === 'date_range') {
+                $rule = $service->normalizeDateRange(
+                    (string) ($_POST['starts_on'] ?? ''),
+                    (string) ($_POST['ends_on'] ?? ''),
+                    (string) ($_POST['reason'] ?? '')
+                );
+                if ($rule['ends_on'] < $today) {
+                    throw new \RuntimeException('O período informado já terminou.');
+                }
+            } elseif ($type === 'weekly') {
+                $rule = $service->normalizeWeekly(
+                    (int) ($_POST['weekday'] ?? 0),
+                    (string) ($_POST['starts_on'] ?? $today),
+                    trim((string) ($_POST['ends_on'] ?? '')) !== '' ? (string) $_POST['ends_on'] : null,
+                    (string) ($_POST['starts_at'] ?? ''),
+                    (string) ($_POST['ends_at'] ?? ''),
+                    (string) ($_POST['reason'] ?? '')
+                );
+                if ($rule['ends_on'] !== null && $rule['ends_on'] < $today) {
+                    throw new \RuntimeException('A recorrência informada já terminou.');
+                }
+            } else {
+                throw new \RuntimeException('Tipo de ausência inválido.');
+            }
+
+            if ($this->absenceHasAppointments($pdo, $establishmentId, $providerId, $rule)) {
+                throw new \RuntimeException('Existem agendamentos ativos dentro desse período. Reagende ou cancele esses atendimentos antes de criar a ausência.');
+            }
+
+            $insert = $pdo->prepare(
+                'INSERT INTO provider_absences '
+                . '(establishment_id,user_id,kind,starts_on,ends_on,weekday,all_day,starts_at,ends_at,reason) '
+                . 'VALUES (:establishment,:provider,:kind,:starts_on,:ends_on,:weekday,:all_day,:starts_at,:ends_at,:reason)'
+            );
+            $insert->execute([
+                'establishment' => $establishmentId,
+                'provider' => $providerId,
+                'kind' => $rule['kind'],
+                'starts_on' => $rule['starts_on'],
+                'ends_on' => $rule['ends_on'],
+                'weekday' => $rule['weekday'],
+                'all_day' => $rule['all_day'],
+                'starts_at' => $rule['starts_at'],
+                'ends_at' => $rule['ends_at'],
+                'reason' => $rule['reason'],
+            ]);
+
+            flash('success', $type === 'date_range' ? 'Período de férias/ausência salvo.' : 'Ausência recorrente salva.');
+        } catch (\Throwable $exception) {
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível salvar a ausência.');
+        }
+
+        redirect('/painel/equipe/' . $providerId . '/horarios');
+    }
+
+    public function deleteAbsence(string $id, string $absenceId): void
+    {
+        Auth::requireRole(['owner']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $providerId = (int) $id;
+
+        $stmt = Database::connection()->prepare(
+            'DELETE FROM provider_absences '
+            . 'WHERE id=:absence AND establishment_id=:establishment AND user_id=:provider'
+        );
+        $stmt->execute([
+            'absence' => (int) $absenceId,
+            'establishment' => $establishmentId,
+            'provider' => $providerId,
+        ]);
+
+        flash($stmt->rowCount() ? 'success' : 'error', $stmt->rowCount() ? 'Ausência removida.' : 'Ausência não encontrada.');
+        redirect('/painel/equipe/' . $providerId . '/horarios');
+    }
+
     public function storeBlock(string $id): void
     {
         Auth::requireRole(['owner']);
@@ -423,6 +538,54 @@ final class TeamController
 
         flash('success', 'Bloqueio removido.');
         redirect('/painel/equipe/' . $providerId . '/horarios');
+    }
+
+    private function absenceHasAppointments(\PDO $pdo, int $establishmentId, int $providerId, array $rule): bool
+    {
+        if (($rule['kind'] ?? null) === 'date_range') {
+            $start = (string) $rule['starts_on'] . ' 00:00:00';
+            $endExclusive = (new DateTimeImmutable((string) $rule['ends_on'] . ' 00:00:00'))
+                ->modify('+1 day')
+                ->format('Y-m-d H:i:s');
+
+            $stmt = $pdo->prepare(
+                'SELECT 1 FROM appointments WHERE establishment_id=:establishment '
+                . 'AND employee_user_id=:provider AND status IN ("pending","confirmed") '
+                . 'AND starts_at<:end_exclusive AND ends_at>:start LIMIT 1'
+            );
+            $stmt->execute([
+                'establishment' => $establishmentId,
+                'provider' => $providerId,
+                'end_exclusive' => $endExclusive,
+                'start' => $start,
+            ]);
+            return (bool) $stmt->fetchColumn();
+        }
+
+        $sql = 'SELECT 1 FROM appointments WHERE establishment_id=:establishment '
+            . 'AND employee_user_id=:provider AND status IN ("pending","confirmed") '
+            . 'AND starts_at>=:starts_on AND (WEEKDAY(starts_at)+1)=:weekday '
+            . 'AND TIME(starts_at)<:ends_at AND TIME(ends_at)>:starts_at';
+        $params = [
+            'establishment' => $establishmentId,
+            'provider' => $providerId,
+            'starts_on' => (string) $rule['starts_on'] . ' 00:00:00',
+            'weekday' => (int) $rule['weekday'],
+            'ends_at' => (string) $rule['ends_at'],
+            'starts_at' => (string) $rule['starts_at'],
+        ];
+
+        if (!empty($rule['ends_on'])) {
+            $sql .= ' AND starts_at<:ends_on';
+            $params['ends_on'] = (new DateTimeImmutable((string) $rule['ends_on'] . ' 00:00:00'))
+                ->modify('+1 day')
+                ->format('Y-m-d H:i:s');
+        }
+
+        $sql .= ' LIMIT 1';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return (bool) $stmt->fetchColumn();
     }
 
     private function provider(\PDO $pdo, int $establishmentId, int $providerId): ?array
