@@ -189,7 +189,7 @@ $today = (string) $today;
                       até <?= e(date('d/m/Y', strtotime((string) $absence['ends_on']))) ?>
                     </div>
                   <?php else: ?>
-                    <div class="fw-semibold small">Toda <?= e(mb_strtolower($days[(int) $absence['weekday']] ?? 'semana')) ?></div>
+                    <div class="fw-semibold small">Recorrência: <?= e($days[(int) $absence['weekday']] ?? 'semana') ?></div>
                     <div class="small text-muted-app">
                       <?= e(substr((string) $absence['starts_at'], 0, 5)) ?>–<?= e(substr((string) $absence['ends_at'], 0, 5)) ?>
                       · desde <?= e(date('d/m/Y', strtotime((string) $absence['starts_on']))) ?>
