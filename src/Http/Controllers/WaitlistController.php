@@ -11,6 +11,7 @@ use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\AvailabilityService;
 use App\Services\CustomerService;
+use App\Services\EstablishmentClock;
 use App\Services\WaitlistAutomationService;
 use DateInterval;
 use DateTimeImmutable;
@@ -50,8 +51,9 @@ final class WaitlistController
         }
 
         try {
-            $desiredDate = new DateTimeImmutable($date);
-            $today = new DateTimeImmutable('today');
+            $clock = new EstablishmentClock();
+            $desiredDate = $clock->inTimezone((string) $establishment['timezone'], $date . ' 00:00:00');
+            $today = $clock->inTimezone((string) $establishment['timezone'])->setTime(0, 0, 0);
         } catch (\Throwable) {
             flash('error', 'Data inválida para lista de espera.');
             redirect('/estabelecimentos/' . $slug);
@@ -126,7 +128,6 @@ final class WaitlistController
             . 'LEFT JOIN users u ON u.id=w.preferred_employee_user_id '
             . 'LEFT JOIN waitlist_matches wm ON wm.id=(SELECT wm2.id FROM waitlist_matches wm2 '
             . 'WHERE wm2.waitlist_entry_id=w.id AND wm2.status IN ("available","queued","notified") '
-            . 'AND wm2.slot_start>NOW() AND (wm2.offer_expires_at IS NULL OR wm2.offer_expires_at>NOW()) '
             . 'ORDER BY wm2.slot_start ASC LIMIT 1) '
             . 'LEFT JOIN users mu ON mu.id=wm.employee_user_id '
             . 'WHERE c.user_id=:user ORDER BY FIELD(w.status,"notified","waiting","converted","cancelled"),w.desired_date DESC,w.created_at DESC'
@@ -219,7 +220,7 @@ final class WaitlistController
         $hash = hash('sha256', $token);
         $stmt = Database::connection()->prepare(
             'SELECT wm.id,wm.slot_start,wm.status,wm.offer_expires_at,w.status waitlist_status,'
-            . 'e.name establishment_name,s.name service_name,u.name employee_name '
+            . 'e.name establishment_name,e.timezone,s.name service_name,u.name employee_name '
             . 'FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id '
             . 'JOIN customers c ON c.id=w.customer_id JOIN establishments e ON e.id=wm.establishment_id '
             . 'JOIN services s ON s.id=w.service_id JOIN users u ON u.id=wm.employee_user_id '
@@ -228,10 +229,18 @@ final class WaitlistController
         $stmt->execute(['hash' => $hash, 'user' => Auth::id()]);
         $offer = $stmt->fetch();
 
+        $clock = new EstablishmentClock();
+        $timezone = (string) ($offer['timezone'] ?? env('APP_TIMEZONE', 'America/Sao_Paulo'));
+        $now = $clock->inTimezone($timezone);
+        $slotStart = $offer ? $clock->inTimezone($timezone, (string) $offer['slot_start']) : null;
+        $expiresAt = $offer && !empty($offer['offer_expires_at'])
+            ? $clock->inTimezone($timezone, (string) $offer['offer_expires_at'])
+            : null;
+
         if (!$offer || !in_array($offer['status'], ['queued', 'notified'], true)
             || !in_array($offer['waitlist_status'], ['waiting', 'notified'], true)
-            || strtotime((string) $offer['slot_start']) <= time()
-            || (!empty($offer['offer_expires_at']) && strtotime((string) $offer['offer_expires_at']) <= time())) {
+            || $slotStart === null || $slotStart <= $now
+            || ($expiresAt !== null && $expiresAt <= $now)) {
             flash('error', 'Esta oferta expirou ou já não está disponível.');
             redirect('/painel/minha-lista-espera');
         }
@@ -278,12 +287,14 @@ final class WaitlistController
     {
         Auth::requireRole(['owner', 'employee']);
         $establishmentId = TenantContext::requireEstablishmentId();
-        $stmt = Database::connection()->prepare(
+        $pdo = Database::connection();
+        (new WaitlistAutomationService())->expireOffers($establishmentId);
+        $stmt = $pdo->prepare(
             'SELECT w.*, s.name AS service_name, c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email, '
             . 'u.name AS provider_name, wm.slot_start AS matched_slot, wm.status AS match_status, mu.name AS matched_provider_name '
             . 'FROM waitlist_entries w JOIN services s ON s.id=w.service_id JOIN customers c ON c.id=w.customer_id '
             . 'LEFT JOIN users u ON u.id=w.preferred_employee_user_id '
-            . 'LEFT JOIN waitlist_matches wm ON wm.id=(SELECT wm2.id FROM waitlist_matches wm2 WHERE wm2.waitlist_entry_id=w.id AND wm2.status IN ("available","queued","notified") AND wm2.slot_start>=NOW() ORDER BY wm2.slot_start ASC LIMIT 1) '
+            . 'LEFT JOIN waitlist_matches wm ON wm.id=(SELECT wm2.id FROM waitlist_matches wm2 WHERE wm2.waitlist_entry_id=w.id AND wm2.status IN ("available","queued","notified") ORDER BY wm2.slot_start ASC LIMIT 1) '
             . 'LEFT JOIN users mu ON mu.id=wm.employee_user_id '
             . 'WHERE w.establishment_id=:establishment ORDER BY FIELD(w.status,"waiting","notified","converted","cancelled"),w.desired_date,w.created_at'
         );
@@ -354,9 +365,10 @@ final class WaitlistController
                 throw new \RuntimeException('O estabelecimento ou serviço não está disponível.');
             }
 
+            $clock = new EstablishmentClock();
             $timezone = new DateTimeZone((string) $match['timezone']);
             $slotStart = new DateTimeImmutable((string) $match['slot_start'], $timezone);
-            $now = new DateTimeImmutable('now', $timezone);
+            $now = $clock->inTimezone((string) $match['timezone']);
             if ($slotStart <= $now || (!empty($match['offer_expires_at']) && new DateTimeImmutable((string) $match['offer_expires_at'], $timezone) <= $now)) {
                 $this->expireMatchInsideTransaction($pdo, $match);
                 $pdo->commit();
@@ -416,9 +428,13 @@ final class WaitlistController
             ]);
 
             $pdo->prepare(
-                'UPDATE waitlist_matches SET status="converted",accepted_at=NOW(),appointment_id=:appointment '
+                'UPDATE waitlist_matches SET status="converted",accepted_at=:accepted_at,appointment_id=:appointment '
                 . 'WHERE id=:id'
-            )->execute(['appointment' => $appointmentId, 'id' => $matchId]);
+            )->execute([
+                'accepted_at' => $clock->sql($now),
+                'appointment' => $appointmentId,
+                'id' => $matchId,
+            ]);
             $pdo->prepare('UPDATE waitlist_entries SET status="converted" WHERE id=:id')
                 ->execute(['id' => $match['waitlist_entry_id']]);
             $pdo->prepare(
