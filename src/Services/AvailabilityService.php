@@ -46,13 +46,11 @@ final class AvailabilityService
         $now = new DateTimeImmutable('now', $timezone);
         if ($day > $now->modify('+' . (int) $settings['max_advance_days'] . ' days')->setTime(23, 59, 59)) return [];
 
-        $hours = $this->hoursForDate($pdo, $establishmentId, $day);
-        if ($hours === null) return [];
-        $hours = $this->applyProviderHours($pdo, $establishmentId, $employeeId, $day, $hours);
-        if ($hours === null) return [];
+        $ranges = $this->rangesForDate($pdo, $establishmentId, $day);
+        if ($ranges === []) return [];
+        $ranges = $this->applyProviderRanges($pdo, $establishmentId, $employeeId, $day, $ranges);
+        if ($ranges === []) return [];
 
-        $opening = new DateTimeImmutable($date . ' ' . $hours['opens_at'], $timezone);
-        $closing = new DateTimeImmutable($date . ' ' . $hours['closes_at'], $timezone);
         $duration = new DateInterval('PT' . (int) $service['duration_minutes'] . 'M');
         $step = new DateInterval('PT15M');
 
@@ -89,14 +87,23 @@ final class AvailabilityService
         $minimumStart = $now->modify('+' . (int) $settings['min_notice_minutes'] . ' minutes');
         $bufferMinutes = (int) $settings['buffer_minutes'];
         $slots = [];
-        for ($cursor = $opening; $cursor->add($duration) <= $closing; $cursor = $cursor->add($step)) {
-            $end = $cursor->add($duration);
-            if ($cursor < $minimumStart) continue;
-            if ($this->overlaps($cursor, $end, $blocked, $timezone)) continue;
-            if ($this->overlapsWithBuffer($cursor, $end, $busy, $timezone, $bufferMinutes)) continue;
-            $slots[] = $cursor->format('H:i');
+
+        foreach ($ranges as $range) {
+            $opening = new DateTimeImmutable($date . ' ' . $range['opens_at'], $timezone);
+            $closing = new DateTimeImmutable($date . ' ' . $range['closes_at'], $timezone);
+
+            for ($cursor = $opening; $cursor->add($duration) <= $closing; $cursor = $cursor->add($step)) {
+                $end = $cursor->add($duration);
+                if ($cursor < $minimumStart) continue;
+                if ($this->overlaps($cursor, $end, $blocked, $timezone)) continue;
+                if ($this->overlapsWithBuffer($cursor, $end, $busy, $timezone, $bufferMinutes)) continue;
+                $slots[$cursor->format('H:i')] = true;
+            }
         }
-        return $slots;
+
+        $times = array_keys($slots);
+        sort($times, SORT_STRING);
+        return $times;
     }
 
     public function slotsForAnyProvider(int $establishmentId, int $serviceId, string $date): array
@@ -142,37 +149,89 @@ final class AvailabilityService
         ];
     }
 
-    private function hoursForDate(\PDO $pdo, int $establishmentId, DateTimeImmutable $day): ?array
+    private function rangesForDate(\PDO $pdo, int $establishmentId, DateTimeImmutable $day): array
     {
         $date = $day->format('Y-m-d');
         $specialStmt = $pdo->prepare('SELECT opens_at, closes_at, is_closed FROM special_hours WHERE establishment_id = :establishment AND special_date = :date LIMIT 1');
         $specialStmt->execute(['establishment' => $establishmentId, 'date' => $date]);
         $special = $specialStmt->fetch();
         if ($special) {
-            if ((int) $special['is_closed'] === 1 || !$special['opens_at'] || !$special['closes_at']) return null;
-            return $special;
+            if ((int) $special['is_closed'] === 1 || !$special['opens_at'] || !$special['closes_at']) return [];
+            return [[
+                'opens_at' => substr((string) $special['opens_at'], 0, 5),
+                'closes_at' => substr((string) $special['closes_at'], 0, 5),
+            ]];
         }
-        if ((new BrazilHolidayService())->nameForDate($date) !== null) return null;
+        if ((new BrazilHolidayService())->nameForDate($date) !== null) return [];
 
+        $weekday = (int) $day->format('N');
         $stmt = $pdo->prepare('SELECT opens_at, closes_at, is_closed FROM business_hours WHERE establishment_id = :establishment AND weekday = :weekday LIMIT 1');
-        $stmt->execute(['establishment' => $establishmentId, 'weekday' => (int) $day->format('N')]);
+        $stmt->execute(['establishment' => $establishmentId, 'weekday' => $weekday]);
         $hours = $stmt->fetch();
-        if (!$hours || (int) $hours['is_closed'] === 1 || !$hours['opens_at'] || !$hours['closes_at']) return null;
-        return $hours;
+        if (!$hours || (int) $hours['is_closed'] === 1) return [];
+
+        try {
+            $rangeStmt = $pdo->prepare(
+                'SELECT opens_at,closes_at FROM business_hour_ranges '
+                . 'WHERE establishment_id=:establishment AND weekday=:weekday ORDER BY sort_order,id'
+            );
+            $rangeStmt->execute(['establishment' => $establishmentId, 'weekday' => $weekday]);
+            $ranges = $rangeStmt->fetchAll();
+            if ($ranges !== []) {
+                return array_map(static fn (array $range): array => [
+                    'opens_at' => substr((string) $range['opens_at'], 0, 5),
+                    'closes_at' => substr((string) $range['closes_at'], 0, 5),
+                ], $ranges);
+            }
+        } catch (\PDOException) {
+            // Compatibilidade durante deploy antes da migration de múltiplas faixas.
+        }
+
+        if (!$hours['opens_at'] || !$hours['closes_at']) return [];
+        return [[
+            'opens_at' => substr((string) $hours['opens_at'], 0, 5),
+            'closes_at' => substr((string) $hours['closes_at'], 0, 5),
+        ]];
     }
 
-    private function applyProviderHours(\PDO $pdo, int $establishmentId, int $providerId, DateTimeImmutable $day, array $establishmentHours): ?array
+    private function applyProviderRanges(\PDO $pdo, int $establishmentId, int $providerId, DateTimeImmutable $day, array $establishmentRanges): array
     {
+        $weekday = (int) $day->format('N');
         $stmt = $pdo->prepare('SELECT opens_at, closes_at, is_off FROM provider_hours WHERE establishment_id = :establishment AND user_id = :provider AND weekday = :weekday LIMIT 1');
-        $stmt->execute(['establishment' => $establishmentId, 'provider' => $providerId, 'weekday' => (int) $day->format('N')]);
+        $stmt->execute(['establishment' => $establishmentId, 'provider' => $providerId, 'weekday' => $weekday]);
         $providerHours = $stmt->fetch();
-        if (!$providerHours) return $establishmentHours;
-        if ((int) $providerHours['is_off'] === 1 || !$providerHours['opens_at'] || !$providerHours['closes_at']) return null;
 
-        $opensAt = max(substr((string) $establishmentHours['opens_at'], 0, 8), substr((string) $providerHours['opens_at'], 0, 8));
-        $closesAt = min(substr((string) $establishmentHours['closes_at'], 0, 8), substr((string) $providerHours['closes_at'], 0, 8));
-        if ($opensAt >= $closesAt) return null;
-        return ['opens_at' => $opensAt, 'closes_at' => $closesAt, 'is_closed' => 0];
+        if (!$providerHours) return $establishmentRanges;
+        if ((int) $providerHours['is_off'] === 1) return [];
+
+        $providerRanges = [];
+        try {
+            $rangeStmt = $pdo->prepare(
+                'SELECT opens_at,closes_at FROM provider_hour_ranges '
+                . 'WHERE establishment_id=:establishment AND user_id=:provider AND weekday=:weekday ORDER BY sort_order,id'
+            );
+            $rangeStmt->execute([
+                'establishment' => $establishmentId,
+                'provider' => $providerId,
+                'weekday' => $weekday,
+            ]);
+            $providerRanges = array_map(static fn (array $range): array => [
+                'opens_at' => substr((string) $range['opens_at'], 0, 5),
+                'closes_at' => substr((string) $range['closes_at'], 0, 5),
+            ], $rangeStmt->fetchAll());
+        } catch (\PDOException) {
+            // Compatibilidade durante deploy antes da migration de múltiplas faixas.
+        }
+
+        if ($providerRanges === [] && $providerHours['opens_at'] && $providerHours['closes_at']) {
+            $providerRanges[] = [
+                'opens_at' => substr((string) $providerHours['opens_at'], 0, 5),
+                'closes_at' => substr((string) $providerHours['closes_at'], 0, 5),
+            ];
+        }
+
+        if ($providerRanges === []) return [];
+        return (new ScheduleRangeService())->intersect($establishmentRanges, $providerRanges);
     }
 
     private function overlaps(DateTimeImmutable $start, DateTimeImmutable $end, array $periods, DateTimeZone $timezone): bool

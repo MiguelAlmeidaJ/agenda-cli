@@ -114,6 +114,19 @@ CREATE TABLE IF NOT EXISTS business_hours (
     CONSTRAINT chk_business_hours_weekday CHECK (weekday BETWEEN 1 AND 7)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS business_hour_ranges (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    weekday TINYINT UNSIGNED NOT NULL COMMENT '1=segunda ... 7=domingo',
+    opens_at TIME NOT NULL,
+    closes_at TIME NOT NULL,
+    sort_order TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_business_hour_ranges_day (establishment_id, weekday, sort_order),
+    CONSTRAINT fk_business_hour_ranges_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT chk_business_hour_ranges_weekday CHECK (weekday BETWEEN 1 AND 7)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS special_hours (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     establishment_id BIGINT UNSIGNED NOT NULL,
@@ -185,6 +198,21 @@ CREATE TABLE IF NOT EXISTS provider_hours (
     CONSTRAINT fk_provider_hours_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
     CONSTRAINT fk_provider_hours_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT chk_provider_hours_weekday CHECK (weekday BETWEEN 1 AND 7)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS provider_hour_ranges (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    weekday TINYINT UNSIGNED NOT NULL COMMENT '1=segunda ... 7=domingo',
+    opens_at TIME NOT NULL,
+    closes_at TIME NOT NULL,
+    sort_order TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_provider_hour_ranges_day (establishment_id, user_id, weekday, sort_order),
+    CONSTRAINT fk_provider_hour_ranges_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_provider_hour_ranges_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT chk_provider_hour_ranges_weekday CHECK (weekday BETWEEN 1 AND 7)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS appointment_events (
