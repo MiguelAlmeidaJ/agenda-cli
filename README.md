@@ -76,9 +76,10 @@ mysql -u usuario -p banco < database/migrations/2026_09_15_profile_details.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_cloudinary_media.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_establishment_location.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_security_hardening.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_client_experience.sql
 ```
 
-As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada e proteção contra tentativas repetidas de login.
+As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login e o ciclo de auto-reagendamento/lista de espera do cliente.
 
 ## Automação por cron
 
