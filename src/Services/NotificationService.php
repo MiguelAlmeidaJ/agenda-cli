@@ -35,14 +35,39 @@ final class NotificationService
         $result = ['confirmation' => 0, 'cancellation' => 0, 'reminder_24h' => 0, 'reminder_2h' => 0];
         if ((int) $settings['whatsapp_enabled'] !== 1) return $result;
 
+        $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
+        $recentEpoch = time() - (7 * 86400);
+
         $rules = [
-            'confirmation' => [(int) $settings['confirmation_enabled'], 'a.status="confirmed" AND a.starts_at>NOW() AND (a.created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY) OR a.updated_at>=DATE_SUB(NOW(), INTERVAL 7 DAY))', 'appointment_confirmation'],
-            'cancellation' => [(int) $settings['cancellation_enabled'], 'a.status="cancelled" AND a.updated_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)', 'appointment_cancelled'],
-            'reminder_24h' => [(int) $settings['reminder_24h_enabled'], 'a.status="confirmed" AND a.starts_at BETWEEN DATE_ADD(NOW(), INTERVAL 23 HOUR) AND DATE_ADD(NOW(), INTERVAL 25 HOUR)', 'reminder_24h'],
-            'reminder_2h' => [(int) $settings['reminder_2h_enabled'], 'a.status="confirmed" AND a.starts_at BETWEEN DATE_ADD(NOW(), INTERVAL 90 MINUTE) AND DATE_ADD(NOW(), INTERVAL 150 MINUTE)', 'reminder_2h'],
+            'confirmation' => [
+                (int) $settings['confirmation_enabled'],
+                'a.status="confirmed" AND a.starts_at>:now AND (UNIX_TIMESTAMP(a.created_at)>=:recent_epoch OR UNIX_TIMESTAMP(a.updated_at)>=:recent_epoch)',
+                'appointment_confirmation',
+                ['now'=>$clock->sql($now),'recent_epoch'=>$recentEpoch],
+            ],
+            'cancellation' => [
+                (int) $settings['cancellation_enabled'],
+                'a.status="cancelled" AND UNIX_TIMESTAMP(a.updated_at)>=:recent_epoch',
+                'appointment_cancelled',
+                ['recent_epoch'=>$recentEpoch],
+            ],
+            'reminder_24h' => [
+                (int) $settings['reminder_24h_enabled'],
+                'a.status="confirmed" AND a.starts_at BETWEEN :window_start AND :window_end',
+                'reminder_24h',
+                ['window_start'=>$clock->sql($now->modify('+23 hours')),'window_end'=>$clock->sql($now->modify('+25 hours'))],
+            ],
+            'reminder_2h' => [
+                (int) $settings['reminder_2h_enabled'],
+                'a.status="confirmed" AND a.starts_at BETWEEN :window_start AND :window_end',
+                'reminder_2h',
+                ['window_start'=>$clock->sql($now->modify('+90 minutes')),'window_end'=>$clock->sql($now->modify('+150 minutes'))],
+            ],
         ];
-        foreach ($rules as $key => [$enabled, $condition, $event]) {
-            if ($enabled === 1) $result[$key] = $this->queueAppointments($establishmentId, $condition, $event);
+        foreach ($rules as $key => [$enabled, $condition, $event, $params]) {
+            if ($enabled === 1) $result[$key] = $this->queueAppointments($establishmentId, $condition, $event, $params);
         }
         return $result;
     }
@@ -81,9 +106,11 @@ final class NotificationService
             }
 
             $offerMinutes = max(5, min(1440, (int) ($settings['waitlist_offer_minutes'] ?? 30)));
+            $clock = new EstablishmentClock();
+            $now = $clock->now($pdo, (int) $row['establishment_id']);
             $token = bin2hex(random_bytes(32));
             $tokenHash = hash('sha256', $token);
-            $expiresAt = date('Y-m-d H:i:s', time() + ($offerMinutes * 60));
+            $expiresAt = $clock->sql($now->modify('+' . $offerMinutes . ' minutes'));
             $acceptUrl = url('/lista-espera/oferta/' . $token);
 
             $message = sprintf(
@@ -108,7 +135,8 @@ final class NotificationService
                 'waitlist_slot_available',
                 $phone,
                 $message,
-                $dedupe
+                $dedupe,
+                $clock->sql($now)
             );
             if (!$queued) {
                 $pdo->rollBack();
@@ -134,12 +162,14 @@ final class NotificationService
         }
     }
 
-    private function queueAppointments(int $establishmentId, string $condition, string $event): int
+    private function queueAppointments(int $establishmentId, string $condition, string $event, array $conditionParams = []): int
     {
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $scheduledAt = $clock->sql($clock->now($pdo, $establishmentId));
         $sql = 'SELECT a.id,a.customer_id,a.starts_at,e.name establishment_name,s.name service_name,p.name employee_name,COALESCE(c.name,u.name,"Cliente") customer_name,COALESCE(c.phone,u.phone) phone FROM appointments a JOIN establishments e ON e.id=a.establishment_id JOIN services s ON s.id=a.service_id JOIN users p ON p.id=a.employee_user_id LEFT JOIN customers c ON c.id=a.customer_id LEFT JOIN users u ON u.id=a.client_user_id WHERE a.establishment_id=:id AND ' . $condition;
         $stmt = $pdo->prepare($sql);
-        $stmt->execute(['id' => $establishmentId]);
+        $stmt->execute(array_merge(['id' => $establishmentId], $conditionParams));
         $count = 0;
         foreach ($stmt->fetchAll() as $row) {
             $phone = $this->digits((string) ($row['phone'] ?? ''));
@@ -156,7 +186,7 @@ final class NotificationService
                 $cancel->execute(['appointment'=>$row['id'],'event'=>$event,'dedupe'=>$dedupe]);
             }
 
-            if ($this->queue($establishmentId, $row['customer_id'] ? (int) $row['customer_id'] : null, (int) $row['id'], null, $event, $phone, $message, $dedupe)) $count++;
+            if ($this->queue($establishmentId, $row['customer_id'] ? (int) $row['customer_id'] : null, (int) $row['id'], null, $event, $phone, $message, $dedupe, $scheduledAt)) $count++;
         }
         return $count;
     }
@@ -174,10 +204,15 @@ final class NotificationService
         };
     }
 
-    private function queue(int $establishmentId, ?int $customerId, ?int $appointmentId, ?int $waitlistId, string $event, string $recipient, string $message, string $dedupe): bool
+    private function queue(int $establishmentId, ?int $customerId, ?int $appointmentId, ?int $waitlistId, string $event, string $recipient, string $message, string $dedupe, ?string $scheduledAt = null): bool
     {
-        $stmt = Database::connection()->prepare('INSERT IGNORE INTO notification_outbox (establishment_id,customer_id,appointment_id,waitlist_entry_id,event_type,recipient,message,scheduled_at,dedupe_key) VALUES (:e,:c,:a,:w,:t,:r,:m,NOW(),:d)');
-        $stmt->execute(['e'=>$establishmentId,'c'=>$customerId,'a'=>$appointmentId,'w'=>$waitlistId,'t'=>$event,'r'=>$recipient,'m'=>$message,'d'=>$dedupe]);
+        $pdo = Database::connection();
+        if ($scheduledAt === null) {
+            $clock = new EstablishmentClock();
+            $scheduledAt = $clock->sql($clock->now($pdo, $establishmentId));
+        }
+        $stmt = $pdo->prepare('INSERT IGNORE INTO notification_outbox (establishment_id,customer_id,appointment_id,waitlist_entry_id,event_type,recipient,message,scheduled_at,dedupe_key) VALUES (:e,:c,:a,:w,:t,:r,:m,:scheduled,:d)');
+        $stmt->execute(['e'=>$establishmentId,'c'=>$customerId,'a'=>$appointmentId,'w'=>$waitlistId,'t'=>$event,'r'=>$recipient,'m'=>$message,'scheduled'=>$scheduledAt,'d'=>$dedupe]);
         return $stmt->rowCount() > 0;
     }
 
