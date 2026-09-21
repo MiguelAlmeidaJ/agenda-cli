@@ -35,10 +35,11 @@ $memberSince = !empty($profile['created_at']) ? date('m/Y', strtotime((string) $
         </div>
         <h2 class="h5 mb-1"><?= e($profile['name']) ?></h2>
         <div class="small text-muted-app"><?= e($profile['email']) ?></div>
-        <div class="d-flex justify-content-center flex-wrap gap-2 mt-3 mb-4">
+        <div class="d-flex justify-content-center flex-wrap gap-2 mt-3 mb-3">
           <span class="badge badge-soft"><?= e($roleLabels[$profile['role']] ?? ucfirst((string) $profile['role'])) ?></span>
           <?php if ($memberSince): ?><span class="badge text-bg-light border">Desde <?= e($memberSince) ?></span><?php endif; ?>
         </div>
+        <a class="btn btn-outline-secondary btn-sm mb-4" href="<?= e(url('/painel/perfil/senha')) ?>"><i class="bi bi-key me-2"></i>Alterar senha</a>
 
         <form method="post" enctype="multipart/form-data" action="<?= e(url('/painel/perfil/foto')) ?>" class="d-grid gap-2 text-start">
           <?= Csrf::field() ?>

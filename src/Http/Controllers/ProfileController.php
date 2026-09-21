@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\View;
 use App\Services\CloudinaryMediaService;
 use App\Services\MediaCleanupService;
+use App\Services\PasswordPolicy;
 use DateTimeImmutable;
 
 final class ProfileController
@@ -110,6 +111,56 @@ final class ProfileController
         ]);
 
         flash('success', 'Dados pessoais atualizados.');
+        redirect('/painel/perfil');
+    }
+
+    public function passwordForm(): void
+    {
+        Auth::requireLogin();
+        View::render('panel/password', ['title' => 'Alterar senha']);
+    }
+
+    public function updatePassword(): void
+    {
+        Auth::requireLogin();
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $currentPassword = (string) ($_POST['current_password'] ?? '');
+        $newPassword = (string) ($_POST['new_password'] ?? '');
+        $confirmation = (string) ($_POST['new_password_confirmation'] ?? '');
+        $policyErrors = (new PasswordPolicy())->errors($newPassword);
+
+        if ($newPassword !== $confirmation) {
+            flash('error', 'A confirmação da nova senha não confere.');
+            redirect('/painel/perfil/senha');
+        }
+        if ($policyErrors !== []) {
+            flash('error', $policyErrors[0]);
+            redirect('/painel/perfil/senha');
+        }
+
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :id AND status = "active" LIMIT 1');
+        $stmt->execute(['id' => Auth::id()]);
+        $hash = $stmt->fetchColumn();
+
+        if (!is_string($hash) || !password_verify($currentPassword, $hash)) {
+            flash('error', 'A senha atual está incorreta.');
+            redirect('/painel/perfil/senha');
+        }
+        if (password_verify($newPassword, $hash)) {
+            flash('error', 'A nova senha deve ser diferente da senha atual.');
+            redirect('/painel/perfil/senha');
+        }
+
+        $pdo->prepare('UPDATE users SET password_hash = :password WHERE id = :id')
+            ->execute([
+                'password' => password_hash($newPassword, PASSWORD_DEFAULT),
+                'id' => Auth::id(),
+            ]);
+
+        session_regenerate_id(true);
+        flash('success', 'Senha alterada com sucesso.');
         redirect('/painel/perfil');
     }
 

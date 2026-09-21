@@ -37,7 +37,13 @@ final class Auth
         $stmt = Database::connection()->prepare('SELECT id, name, email, role, status, avatar_url FROM users WHERE id = :id LIMIT 1');
         $stmt->execute(['id' => (int) $_SESSION['user_id']]);
         $user = $stmt->fetch();
-        self::$userCache = $user ?: null;
+        if (!$user || ($user['status'] ?? null) !== 'active') {
+            unset($_SESSION['user_id']);
+            self::$userCache = null;
+            return null;
+        }
+
+        self::$userCache = $user;
         return self::$userCache;
     }
 

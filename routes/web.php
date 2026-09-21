@@ -44,6 +44,8 @@ $router->post('/admin/estabelecimentos/{id}/editar', [EstablishmentController::c
 $router->get('/painel', [PanelController::class, 'index']);
 $router->get('/painel/perfil', [ProfileController::class, 'index']);
 $router->post('/painel/perfil', [ProfileController::class, 'update']);
+$router->get('/painel/perfil/senha', [ProfileController::class, 'passwordForm']);
+$router->post('/painel/perfil/senha', [ProfileController::class, 'updatePassword']);
 $router->post('/painel/perfil/foto', [ProfileController::class, 'uploadAvatar']);
 $router->post('/painel/perfil/foto/remover', [ProfileController::class, 'deleteAvatar']);
 $router->get('/painel/agenda', [AgendaController::class, 'index']);
