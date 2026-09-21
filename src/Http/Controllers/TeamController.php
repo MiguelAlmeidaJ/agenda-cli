@@ -249,6 +249,7 @@ final class TeamController
             'businessHours' => $businessHours,
             'businessHourRanges' => $businessHourRanges,
             'blocks' => $blocks->fetchAll(),
+            'today' => $now->format('Y-m-d'),
         ]);
     }
 
