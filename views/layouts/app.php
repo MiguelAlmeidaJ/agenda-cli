@@ -42,6 +42,9 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
             <a class="nav-link" href="<?= e(url('/painel/lista-espera')) ?>">Espera</a>
             <a class="nav-link" href="<?= e(url('/painel/notificacoes')) ?>">Notificações</a>
           <?php endif; ?>
+          <?php if (($user['role'] ?? null) === 'client'): ?>
+            <a class="nav-link" href="<?= e(url('/painel/minha-lista-espera')) ?>">Espera</a>
+          <?php endif; ?>
           <a class="nav-link" href="<?= e(url('/painel/agendamentos')) ?>">Agendamentos</a>
 
           <?php if (($user['role'] ?? null) === 'admin'): ?>
