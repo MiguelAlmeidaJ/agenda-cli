@@ -38,11 +38,13 @@ final class PublicEstablishmentSearchService
         if ($filters['q'] !== '') {
             $term = '%' . $this->escapeLike($filters['q']) . '%';
             $where[] = '('
-                . 'e.name LIKE :q_name ESCAPE '!' '
-                . 'OR e.description LIKE :q_description ESCAPE '!' '
+                . "e.name LIKE :q_name ESCAPE '!' "
+                . "OR e.description LIKE :q_description ESCAPE '!' "
                 . 'OR EXISTS (SELECT 1 FROM services sq WHERE sq.establishment_id=e.id AND sq.active=1 '
-                . 'AND (sq.name LIKE :q_service_name ESCAPE '!' OR sq.description LIKE :q_service_description ESCAPE '!'))'
+                . "(sq.name LIKE :q_service_name ESCAPE '!' OR sq.description LIKE :q_service_description ESCAPE '!'))"
                 . ')';
+            $where[count($where) - 1] = str_replace('1 (sq.name', '1 AND (sq.name', $where[count($where) - 1]);
+
             $params['q_name'] = $term;
             $params['q_description'] = $term;
             $params['q_service_name'] = $term;
@@ -50,7 +52,7 @@ final class PublicEstablishmentSearchService
         }
 
         if ($filters['city'] !== '') {
-            $where[] = 'e.city LIKE :city ESCAPE '!'';
+            $where[] = "e.city LIKE :city ESCAPE '!'";
             $params['city'] = '%' . $this->escapeLike($filters['city']) . '%';
         }
 
@@ -59,11 +61,11 @@ final class PublicEstablishmentSearchService
             $params['state'] = $filters['state'];
         }
 
-        $sql = 'SELECT e.id,e.name,e.slug,e.description,e.city,e.state,e.logo_url,e.cover_url,'
-            . 'e.latitude,e.longitude,COUNT(DISTINCT s.id) service_count,MIN(s.price) min_price,'
-            . 'GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR '||') service_names '
-            . 'FROM establishments e '
-            . 'LEFT JOIN services s ON s.establishment_id=e.id AND s.active=1 '
+        $sql = "SELECT e.id,e.name,e.slug,e.description,e.city,e.state,e.logo_url,e.cover_url,"
+            . "e.latitude,e.longitude,COUNT(DISTINCT s.id) service_count,MIN(s.price) min_price,"
+            . "GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR '||') service_names "
+            . "FROM establishments e "
+            . "LEFT JOIN services s ON s.establishment_id=e.id AND s.active=1 "
             . 'WHERE ' . implode(' AND ', $where)
             . ' GROUP BY e.id';
 
@@ -105,8 +107,8 @@ final class PublicEstablishmentSearchService
         )->fetchAll(PDO::FETCH_COLUMN);
 
         $locations = $pdo->query(
-            'SELECT DISTINCT city,state FROM establishments '
-            . 'WHERE active=1 AND city IS NOT NULL AND city<>'' ORDER BY state,city LIMIT 250'
+            "SELECT DISTINCT city,state FROM establishments "
+            . "WHERE active=1 AND city IS NOT NULL AND city<>'' ORDER BY state,city LIMIT 250"
         )->fetchAll();
 
         $cities = [];
