@@ -78,9 +78,10 @@ mysql -u usuario -p banco < database/migrations/2026_09_15_establishment_locatio
 mysql -u usuario -p banco < database/migrations/2026_09_21_security_hardening.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_client_experience.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_multiple_schedule_ranges.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_public_search.sql
 ```
 
-As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login e o ciclo de auto-reagendamento/lista de espera do cliente.
+As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login, experiência do cliente, múltiplas faixas de jornada e índices para a busca pública.
 
 ## Automação por cron
 
@@ -149,6 +150,10 @@ O cliente operacional é armazenado em `customers` e pode existir sem conta de l
 - “Primeiro horário disponível” resolve um profissional real antes da confirmação.
 - Cada estabelecimento define antecedência mínima, janela futura, intervalo entre atendimentos e prazo de cancelamento.
 - Lista de espera não bloqueia agenda e é cruzada automaticamente com vagas disponíveis.
+
+## Busca pública
+
+A rota `/encontre` permite pesquisar por serviço ou estabelecimento, filtrar por cidade/UF e ordenar por relevância, nome ou menor preço inicial. Quando o visitante permite acesso à localização no navegador, os resultados geocodificados podem ser reordenados por distância sem enviar a coordenada do visitante para o backend.
 
 ## Operação
 
