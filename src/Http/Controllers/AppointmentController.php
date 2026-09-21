@@ -391,17 +391,17 @@ final class AppointmentController
 
             $sql = 'SELECT id,status FROM appointments '
                 . 'WHERE establishment_id=:establishment AND series_id=:series '
-                . 'AND starts_at>=:starts AND status IN ("pending","confirmed")';
+                . 'AND series_position>=:position AND status IN ("pending","confirmed")';
             $params = [
                 'establishment' => $establishmentId,
                 'series' => $appointment['series_id'],
-                'starts' => $appointment['starts_at'],
+                'position' => $appointment['series_position'],
             ];
             if (Auth::role() === 'employee') {
                 $sql .= ' AND employee_user_id=:employee';
                 $params['employee'] = Auth::id();
             }
-            $sql .= ' ORDER BY starts_at FOR UPDATE';
+            $sql .= ' ORDER BY series_position FOR UPDATE';
 
             $stmt = $pdo->prepare($sql);
             $stmt->execute($params);
