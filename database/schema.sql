@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS establishments (
     active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_establishments_public_search (active, state, city),
     CONSTRAINT fk_establishment_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS services (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_services_tenant_active (establishment_id, active),
+    KEY idx_services_public_search (establishment_id, active, name),
     CONSTRAINT fk_services_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

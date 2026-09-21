@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Core\Database;
 use App\Core\View;
+use App\Services\PublicEstablishmentSearchService;
 
 final class HomeController
 {
@@ -18,17 +19,18 @@ final class HomeController
 
     public function find(): void
     {
-        $stmt = Database::connection()->query(
-            'SELECT e.id, e.name, e.slug, e.description, e.city, e.state, e.logo_url, e.cover_url, '
-            . 'COUNT(s.id) AS service_count, MIN(s.price) AS min_price '
-            . 'FROM establishments e '
-            . 'LEFT JOIN services s ON s.establishment_id = e.id AND s.active = 1 '
-            . 'WHERE e.active = 1 GROUP BY e.id ORDER BY e.name'
-        );
+        $pdo = Database::connection();
+        $search = new PublicEstablishmentSearchService();
+        $filters = $search->filters($_GET);
+        $suggestions = $search->suggestions($pdo);
 
         View::render('find', [
             'title' => 'Encontre um serviço',
-            'establishments' => $stmt->fetchAll(),
+            'establishments' => $search->search($pdo, $filters),
+            'filters' => $filters,
+            'serviceSuggestions' => $suggestions['services'],
+            'citySuggestions' => $suggestions['cities'],
+            'stateSuggestions' => $suggestions['states'],
         ]);
     }
 
