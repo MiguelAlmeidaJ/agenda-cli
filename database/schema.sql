@@ -190,6 +190,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     starts_at DATETIME NOT NULL,
     ends_at DATETIME NOT NULL,
     status ENUM('pending','confirmed','completed','cancelled','no_show') NOT NULL DEFAULT 'confirmed',
+    attendance_response ENUM('pending','confirmed') NOT NULL DEFAULT 'pending',
+    attendance_responded_at DATETIME NULL,
     price DECIMAL(10,2) NOT NULL DEFAULT 0,
     notes TEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -198,6 +200,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     KEY idx_appointments_tenant_time (establishment_id, starts_at, status),
     KEY idx_appointments_client (client_user_id, starts_at),
     KEY idx_appointments_customer (customer_id, starts_at),
+    KEY idx_appointments_attendance (establishment_id, attendance_response, starts_at, status),
     CONSTRAINT fk_appointments_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id),
     CONSTRAINT fk_appointments_service FOREIGN KEY (service_id) REFERENCES services(id),
     CONSTRAINT fk_appointments_employee FOREIGN KEY (employee_user_id) REFERENCES users(id),
@@ -253,6 +256,21 @@ CREATE TABLE IF NOT EXISTS appointment_events (
     CONSTRAINT fk_appointment_events_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE,
     CONSTRAINT fk_appointment_events_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
     CONSTRAINT fk_appointment_events_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS appointment_attendance_tokens (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    appointment_id BIGINT UNSIGNED NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_appointment_attendance_token (token_hash),
+    KEY idx_appointment_attendance_lookup (appointment_id, expires_at, used_at),
+    KEY idx_appointment_attendance_tenant (establishment_id, expires_at),
+    CONSTRAINT fk_appointment_attendance_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_appointment_attendance_appointment FOREIGN KEY (appointment_id) REFERENCES appointments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS booking_settings (

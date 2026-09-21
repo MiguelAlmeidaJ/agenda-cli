@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Core\Router;
 use App\Http\Controllers\AgendaController;
+use App\Http\Controllers\AttendanceConfirmationController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AppearanceController;
 use App\Http\Controllers\AuthController;
@@ -28,6 +29,8 @@ $router->get('/estabelecimentos/{slug}', [HomeController::class, 'establishment'
 $router->get('/estabelecimentos/{slug}/horarios', [BookingController::class, 'availability']);
 $router->post('/estabelecimentos/{slug}/agendar', [BookingController::class, 'store']);
 $router->post('/estabelecimentos/{slug}/lista-espera', [WaitlistController::class, 'store']);
+$router->get('/agendamentos/presenca/{token}', [AttendanceConfirmationController::class, 'show']);
+$router->post('/agendamentos/presenca/{token}/confirmar', [AttendanceConfirmationController::class, 'confirm']);
 $router->get('/lista-espera/oferta/{token}', [WaitlistController::class, 'offer']);
 $router->post('/lista-espera/oferta/{token}', [WaitlistController::class, 'acceptOffer']);
 
