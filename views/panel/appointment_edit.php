@@ -2,7 +2,7 @@
 
 use App\Core\Csrf;
 
-$today = (new DateTimeImmutable('today'))->format('Y-m-d');
+$today = (string) $today;
 $currentDate = date('Y-m-d', strtotime((string) $appointment['starts_at']));
 $currentTime = date('H:i', strtotime((string) $appointment['starts_at']));
 $statusLabels = [
