@@ -282,7 +282,8 @@ final class BookingController
             $providerName = (string) ($providerNameStmt->fetchColumn() ?: 'Profissional');
 
             $pdo->prepare(
-                'UPDATE appointments SET employee_user_id=:employee,starts_at=:starts,ends_at=:ends '
+                'UPDATE appointments SET employee_user_id=:employee,starts_at=:starts,ends_at=:ends,'
+                . 'attendance_response="pending",attendance_responded_at=NULL '
                 . 'WHERE id=:id AND client_user_id=:client'
             )->execute([
                 'employee' => $employeeId,
@@ -307,6 +308,13 @@ final class BookingController
                 . 'WHERE appointment_id=:appointment AND status="pending" '
                 . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
             )->execute(['appointment' => $appointmentId]);
+
+            $clock = new EstablishmentClock();
+            $invalidatedAt = $clock->sql($clock->inTimezone((string) $appointment['timezone']));
+            $pdo->prepare(
+                'UPDATE appointment_attendance_tokens SET used_at=:used '
+                . 'WHERE appointment_id=:appointment AND used_at IS NULL'
+            )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
 
             $pdo->commit();
             flash('success', 'Agendamento reagendado com sucesso.');
@@ -352,6 +360,13 @@ final class BookingController
 
             $update = $pdo->prepare('UPDATE appointments SET status = "cancelled" WHERE id = :id AND client_user_id = :client');
             $update->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+
+            $clock = new EstablishmentClock();
+            $invalidatedAt = $clock->sql($clock->inTimezone((string) $appointment['timezone']));
+            $pdo->prepare(
+                'UPDATE appointment_attendance_tokens SET used_at=:used '
+                . 'WHERE appointment_id=:appointment AND used_at IS NULL'
+            )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
             $event = $pdo->prepare(
                 'INSERT INTO appointment_events (appointment_id, establishment_id, user_id, event_type, from_status, to_status, details) '
                 . 'VALUES (:appointment, :establishment, :user, "status_changed", :from_status, "cancelled", :details)'
