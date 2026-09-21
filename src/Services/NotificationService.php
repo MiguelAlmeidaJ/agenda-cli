@@ -43,9 +43,13 @@ final class NotificationService
         $rules = [
             'confirmation' => [
                 (int) $settings['confirmation_enabled'],
-                'a.status="confirmed" AND a.starts_at>:now AND (UNIX_TIMESTAMP(a.created_at)>=:recent_epoch OR UNIX_TIMESTAMP(a.updated_at)>=:recent_epoch)',
+                'a.status="confirmed" AND a.starts_at>:now AND (UNIX_TIMESTAMP(a.created_at)>=:created_recent_epoch OR UNIX_TIMESTAMP(a.updated_at)>=:updated_recent_epoch)',
                 'appointment_confirmation',
-                ['now'=>$clock->sql($now),'recent_epoch'=>$recentEpoch],
+                [
+                    'now'=>$clock->sql($now),
+                    'created_recent_epoch'=>$recentEpoch,
+                    'updated_recent_epoch'=>$recentEpoch,
+                ],
             ],
             'cancellation' => [
                 (int) $settings['cancellation_enabled'],
