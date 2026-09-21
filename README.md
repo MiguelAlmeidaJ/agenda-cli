@@ -79,6 +79,7 @@ mysql -u usuario -p banco < database/migrations/2026_09_21_security_hardening.sq
 mysql -u usuario -p banco < database/migrations/2026_09_21_client_experience.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_multiple_schedule_ranges.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_public_search.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_provider_absences.sql
 ```
 
 As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login, experiência do cliente, múltiplas faixas de jornada e índices para a busca pública.
@@ -149,6 +150,8 @@ Cada estabelecimento possui seu próprio timezone. Horários de agenda, bloqueio
 - A semana padrão aceita múltiplas faixas por dia, como 08:00–12:00 e 14:00–18:00.
 - Cada profissional pode herdar a jornada do estabelecimento, usar uma ou mais faixas próprias ou ter folga.
 - Bloqueios individuais retiram períodos específicos da disponibilidade.
+- Profissionais podem ter férias/períodos integrais e ausências semanais recorrentes, sem materializar cada ocorrência.
+- O calendário operacional inclui datas móveis como Carnaval, Paixão de Cristo e Corpus Christi; datas especiais do estabelecimento podem sobrescrever o fechamento padrão.
 - Reagendamentos recalculam disponibilidade e continuam protegidos contra conflito simultâneo.
 - Agendamento manual usa o mesmo motor de disponibilidade do fluxo público.
 - “Primeiro horário disponível” resolve um profissional real antes da confirmação.
