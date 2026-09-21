@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\View;
 use App\Services\AvailabilityService;
 use App\Services\CustomerService;
+use App\Services\EstablishmentClock;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -191,10 +192,15 @@ final class BookingController
             'service' => $appointment['service_id'],
         ]);
 
+        $clock = new EstablishmentClock();
+        $todayDate = $clock->inTimezone((string) $appointment['timezone'])->setTime(0, 0, 0);
+
         View::render('panel/client_appointment_reschedule', [
             'title' => 'Reagendar atendimento',
             'appointment' => $appointment,
             'providers' => $providers->fetchAll(),
+            'today' => $todayDate->format('Y-m-d'),
+            'maxDate' => $todayDate->modify('+' . (int) $appointment['max_advance_days'] . ' days')->format('Y-m-d'),
         ]);
     }
 
