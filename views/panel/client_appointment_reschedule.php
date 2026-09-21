@@ -4,7 +4,6 @@ use App\Core\Csrf;
 
 $currentDate = date('Y-m-d', strtotime((string) $appointment['starts_at']));
 $currentTime = date('H:i', strtotime((string) $appointment['starts_at']));
-$maxDate = (new DateTimeImmutable('today'))->modify('+' . (int) $appointment['max_advance_days'] . ' days')->format('Y-m-d');
 ?>
 <section class="page-header">
   <div>
@@ -35,7 +34,7 @@ $maxDate = (new DateTimeImmutable('today'))->modify('+' . (int) $appointment['ma
           </div>
           <div class="col-md-6">
             <label class="form-label">Data</label>
-            <input class="form-control" type="date" name="date" id="date" min="<?= e(date('Y-m-d')) ?>" max="<?= e($maxDate) ?>" value="<?= e($currentDate) ?>" required>
+            <input class="form-control" type="date" name="date" id="date" min="<?= e($today) ?>" max="<?= e($maxDate) ?>" value="<?= e($currentDate) ?>" required>
           </div>
           <div class="col-12">
             <label class="form-label">Horário disponível</label>
