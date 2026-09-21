@@ -77,6 +77,7 @@ mysql -u usuario -p banco < database/migrations/2026_09_15_cloudinary_media.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_establishment_location.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_security_hardening.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_client_experience.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_multiple_schedule_ranges.sql
 ```
 
 As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login e o ciclo de auto-reagendamento/lista de espera do cliente.
@@ -140,7 +141,8 @@ O cliente operacional é armazenado em `customers` e pode existir sem conta de l
 
 - Um profissional pode realizar vários serviços, mas nunca recebe agendamentos sobrepostos.
 - Horário semanal, datas especiais e feriados definem o funcionamento do estabelecimento.
-- Cada profissional pode herdar a jornada do estabelecimento, usar jornada própria ou ter folga.
+- A semana padrão aceita múltiplas faixas por dia, como 08:00–12:00 e 14:00–18:00.
+- Cada profissional pode herdar a jornada do estabelecimento, usar uma ou mais faixas próprias ou ter folga.
 - Bloqueios individuais retiram períodos específicos da disponibilidade.
 - Reagendamentos recalculam disponibilidade e continuam protegidos contra conflito simultâneo.
 - Agendamento manual usa o mesmo motor de disponibilidade do fluxo público.
