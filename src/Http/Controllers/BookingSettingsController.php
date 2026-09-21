@@ -23,6 +23,8 @@ final class BookingSettingsController
             'max_advance_days' => 90,
             'buffer_minutes' => 0,
             'cancellation_notice_minutes' => 0,
+            'reschedule_notice_minutes' => 0,
+            'waitlist_offer_minutes' => 30,
             'allow_waitlist' => 1,
             'cancellation_policy' => '',
         ];
@@ -40,14 +42,17 @@ final class BookingSettingsController
             'max_advance' => max(1, min(365, (int) ($_POST['max_advance_days'] ?? 90))),
             'buffer' => max(0, min(180, (int) ($_POST['buffer_minutes'] ?? 0))),
             'cancel_notice' => max(0, min(10080, (int) ($_POST['cancellation_notice_minutes'] ?? 0))),
+            'reschedule_notice' => max(0, min(10080, (int) ($_POST['reschedule_notice_minutes'] ?? 0))),
+            'waitlist_offer' => max(5, min(1440, (int) ($_POST['waitlist_offer_minutes'] ?? 30))),
             'waitlist' => isset($_POST['allow_waitlist']) ? 1 : 0,
             'policy' => trim((string) ($_POST['cancellation_policy'] ?? '')) ?: null,
         ];
         $stmt = Database::connection()->prepare(
-            'INSERT INTO booking_settings (establishment_id, min_notice_minutes, max_advance_days, buffer_minutes, cancellation_notice_minutes, allow_waitlist, cancellation_policy) '
-            . 'VALUES (:establishment, :min_notice, :max_advance, :buffer, :cancel_notice, :waitlist, :policy) '
+            'INSERT INTO booking_settings (establishment_id, min_notice_minutes, max_advance_days, buffer_minutes, cancellation_notice_minutes, reschedule_notice_minutes, waitlist_offer_minutes, allow_waitlist, cancellation_policy) '
+            . 'VALUES (:establishment, :min_notice, :max_advance, :buffer, :cancel_notice, :reschedule_notice, :waitlist_offer, :waitlist, :policy) '
             . 'ON DUPLICATE KEY UPDATE min_notice_minutes = VALUES(min_notice_minutes), max_advance_days = VALUES(max_advance_days), '
             . 'buffer_minutes = VALUES(buffer_minutes), cancellation_notice_minutes = VALUES(cancellation_notice_minutes), '
+            . 'reschedule_notice_minutes = VALUES(reschedule_notice_minutes), waitlist_offer_minutes = VALUES(waitlist_offer_minutes), '
             . 'allow_waitlist = VALUES(allow_waitlist), cancellation_policy = VALUES(cancellation_policy)'
         );
         $stmt->execute($values);

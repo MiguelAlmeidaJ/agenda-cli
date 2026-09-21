@@ -35,6 +35,16 @@
               <div class="input-group"><input class="form-control" type="number" min="0" max="10080" step="30" name="cancellation_notice_minutes" value="<?= (int) $settings['cancellation_notice_minutes'] ?>"><span class="input-group-text">min</span></div>
               <div class="form-text">Ex.: 720 permite cancelamento até 12 horas antes.</div>
             </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Prazo mínimo para reagendamento</label>
+              <div class="input-group"><input class="form-control" type="number" min="0" max="10080" step="30" name="reschedule_notice_minutes" value="<?= (int) ($settings['reschedule_notice_minutes'] ?? 0) ?>"><span class="input-group-text">min</span></div>
+              <div class="form-text">Ex.: 720 permite reagendar online até 12 horas antes.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Validade da oferta da lista de espera</label>
+              <div class="input-group"><input class="form-control" type="number" min="5" max="1440" step="5" name="waitlist_offer_minutes" value="<?= (int) ($settings['waitlist_offer_minutes'] ?? 30) ?>"><span class="input-group-text">min</span></div>
+              <div class="form-text">Após esse prazo a vaga é liberada para uma nova tentativa.</div>
+            </div>
           </div>
 
           <hr class="my-4">
