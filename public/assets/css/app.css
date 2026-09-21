@@ -9,6 +9,8 @@ html { scroll-behavior: smooth; }
 body { background: #f7f8fa; color: #1f2937; }
 .navbar { background: rgba(255,255,255,.96); border-bottom: 1px solid var(--app-border); backdrop-filter: blur(12px); }
 .navbar-brand { font-weight: 700; letter-spacing: -.02em; }
+.brand-logo-link { display: inline-flex; align-items: center; padding-top: .1rem; padding-bottom: .1rem; }
+.brand-logo { display: block; width: 140px; height: auto; }
 .container-narrow { max-width: 1080px; }
 .page-header { padding: 2rem 0 1.25rem; }
 .card { border-color: var(--app-border); box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
@@ -310,6 +312,7 @@ body { background: #f7f8fa; color: #1f2937; }
 }
 
 @media (max-width: 575.98px) {
+  .brand-logo { width: 124px; }
   .sales-hero h1 { font-size: 2.55rem; }
   .client-callout { padding: 2rem 1.5rem; }
   .dashboard-header { padding-top: 2rem; }

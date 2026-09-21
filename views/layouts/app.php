@@ -15,6 +15,8 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Agenda online para estabelecimentos de serviços. Organize serviços, profissionais, horários e agendamentos em um só lugar.">
   <title><?= e($title ?? env('APP_NAME', 'Agenda CLI')) ?></title>
+  <link rel="icon" type="image/png" sizes="64x64" href="<?= e(url('/assets/brand/favicon-agendacli.png')) ?>">
+  <link rel="shortcut icon" type="image/png" href="<?= e(url('/assets/brand/favicon-agendacli.png')) ?>">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3ynZC/v9SaYI/Z+LsEEbHfJQp2Po0=" crossorigin="">
@@ -29,7 +31,7 @@ $firstName = $user ? (explode(' ', trim((string) $user['name']))[0] ?? $user['na
 <body>
 <nav class="navbar navbar-expand-lg sticky-top">
   <div class="container container-narrow py-2">
-    <a class="navbar-brand" href="<?= e(url('/')) ?>"><i class="bi bi-calendar2-check me-2"></i><?= e(env('APP_NAME', 'Agenda CLI')) ?></a>
+    <a class="navbar-brand brand-logo-link" href="<?= e(url('/')) ?>" aria-label="AgendaCli - início"><img class="brand-logo" src="<?= e(url('/assets/brand/logo-agendacli.png')) ?>" width="200" height="67" alt="AgendaCli"></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Abrir menu"><span class="navbar-toggler-icon"></span></button>
     <div class="collapse navbar-collapse" id="nav">
       <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
