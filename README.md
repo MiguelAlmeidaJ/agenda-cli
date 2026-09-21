@@ -80,6 +80,7 @@ mysql -u usuario -p banco < database/migrations/2026_09_21_client_experience.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_multiple_schedule_ranges.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_public_search.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_provider_absences.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_attendance_confirmation.sql
 ```
 
 As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login, experiência do cliente, múltiplas faixas de jornada e índices para a busca pública.
@@ -161,6 +162,10 @@ Cada estabelecimento possui seu próprio timezone. Horários de agenda, bloqueio
 ## Busca pública
 
 A rota `/encontre` permite pesquisar por serviço ou estabelecimento, filtrar por cidade/UF e ordenar por relevância, nome ou menor preço inicial. Quando o visitante permite acesso à localização no navegador, os resultados geocodificados podem ser reordenados por distância sem enviar a coordenada do visitante para o backend.
+
+## Confirmação de presença
+
+Agendamentos mantêm o status operacional separado da resposta de presença. Clientes podem confirmar presença pela área autenticada ou por links seguros incluídos nas mensagens de confirmação e lembretes. Os links usam tokens aleatórios de 256 bits; somente o hash é persistido. Reagendamento, cancelamento, conclusão e falta invalidam os tokens antigos. O histórico registra a confirmação do cliente.
 
 ## Operação
 
