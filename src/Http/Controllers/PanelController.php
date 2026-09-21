@@ -268,13 +268,15 @@ final class PanelController
         $role = Auth::role();
 
         $sql = 'SELECT a.*, e.name AS establishment_name, e.timezone AS establishment_timezone, s.name AS service_name, '
-            . 'employee.name AS employee_name, COALESCE(customer.name, client.name, "Cliente") AS client_name '
+            . 'employee.name AS employee_name, COALESCE(customer.name, client.name, "Cliente") AS client_name, '
+            . 'series.occurrences_count AS series_occurrences_count '
             . 'FROM appointments a '
             . 'JOIN establishments e ON e.id = a.establishment_id '
             . 'JOIN services s ON s.id = a.service_id '
             . 'JOIN users employee ON employee.id = a.employee_user_id '
             . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
-            . 'LEFT JOIN users client ON client.id = a.client_user_id ';
+            . 'LEFT JOIN users client ON client.id = a.client_user_id '
+            . 'LEFT JOIN appointment_series series ON series.id=a.series_id AND series.establishment_id=a.establishment_id ';
         $params = [];
 
         if ($role === 'client') {
