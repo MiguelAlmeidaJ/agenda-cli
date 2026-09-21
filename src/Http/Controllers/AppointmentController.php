@@ -296,6 +296,11 @@ final class AppointmentController
                     'UPDATE appointment_attendance_tokens SET used_at=:used '
                     . 'WHERE appointment_id=:appointment AND used_at IS NULL'
                 )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
+                $pdo->prepare(
+                    'UPDATE notification_outbox SET status="cancelled" '
+                    . 'WHERE appointment_id=:appointment AND status="pending" '
+                    . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
+                )->execute(['appointment'=>$appointmentId]);
             }
 
             $this->recordEvent($pdo, $appointmentId, $establishmentId, 'status_changed', $currentStatus, $targetStatus);
