@@ -138,6 +138,10 @@ Enquanto não existe seletor de estabelecimento no login do funcionário, o sist
 
 O cliente operacional é armazenado em `customers` e pode existir sem conta de login. Quando há uma conta `client`, o CRM pode ser vinculado por `user_id`, unificando histórico público e atendimento manual.
 
+## Timezone e datas
+
+Cada estabelecimento possui seu próprio timezone. Horários de agenda, bloqueios, lista de espera e caixa de saída são armazenados como `DATETIME` no horário local do estabelecimento; comparações de “agora”, “hoje”, limites de mês e prazos devem usar `EstablishmentClock`, e não `NOW()`/`CURDATE()` do MySQL ou o timezone padrão do servidor. Campos de auditoria `TIMESTAMP` continuam sendo tratados como instantes técnicos.
+
 ## Regras de agenda
 
 - Um profissional pode realizar vários serviços, mas nunca recebe agendamentos sobrepostos.
