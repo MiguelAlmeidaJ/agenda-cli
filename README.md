@@ -54,13 +54,19 @@ Crie o banco e importe a estrutura:
 mysql -u agenda -p agenda < database/schema.sql
 ```
 
-Para dados de demonstração em desenvolvimento:
+Para carregar uma massa completa de demonstração em desenvolvimento:
 
 ```bash
 php database/seed.php
 ```
 
-> Em produção, não execute o seed de demonstração.
+Em um ambiente de homologação/teste configurado com `APP_ENV=production`, a proteção exige confirmação explícita:
+
+```bash
+php database/seed.php --force
+```
+
+O seed recria somente os estabelecimentos e contas identificados como demo; dados de outros tenants não são apagados. Ele inclui três estabelecimentos com imagens locais, serviços, equipe, jornadas com múltiplas faixas, clientes, histórico de seis meses, agenda do dia, próximos atendimentos, confirmações de presença, uma série recorrente, férias/ausências, bloqueio, data especial, lista de espera e caixa de notificações em vários estados. Execute todas as migrations antes do seed.
 
 ## Atualizações de banco
 
@@ -130,6 +136,8 @@ Em hospedagens com `public_html`, mantenha `src/`, `database/`, `routes/`, `vend
 | Dono | `dono@agenda.local` | `Dono@123` |
 | Funcionário | `funcionario@agenda.local` | `Func@123` |
 | Cliente | `cliente@agenda.local` | `Cliente@123` |
+
+O tenant principal da massa é **Studio Aurora**. A busca pública também recebe **Clínica Horizonte** e **Espaço Essenza** para testar filtros, cards, imagens, cidades/UF e ordenação por proximidade.
 
 ## Multi-tenancy
 
