@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\AvailabilityService;
+use App\Services\EstablishmentClock;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -22,6 +23,8 @@ final class AppointmentController
         $establishmentId = TenantContext::requireEstablishmentId();
         $pdo = Database::connection();
         $selectedCustomerId = (int) ($_GET['customer_id'] ?? 0);
+        $clock = new EstablishmentClock();
+        $today = $clock->now($pdo, $establishmentId)->format('Y-m-d');
 
         $customersStmt = $pdo->prepare(
             'SELECT id, name, email, phone FROM customers WHERE establishment_id = :establishment ORDER BY name LIMIT 500'
@@ -80,6 +83,7 @@ final class AppointmentController
             'providersByService' => $providersByService,
             'role' => Auth::role(),
             'selectedCustomerId' => $selectedCustomerId,
+            'today' => $today,
         ]);
     }
 
@@ -342,9 +346,13 @@ final class AppointmentController
         );
         $events->execute(['appointment' => $appointmentId, 'establishment' => $establishmentId]);
 
+        $clock = new EstablishmentClock();
+        $today = $clock->now($pdo, $establishmentId)->format('Y-m-d');
+
         View::render('panel/appointment_edit', [
             'title' => 'Reagendar atendimento',
             'appointment' => $appointment,
+            'today' => $today,
             'providers' => $providers->fetchAll(),
             'events' => $events->fetchAll(),
         ]);
