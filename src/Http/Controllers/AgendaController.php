@@ -8,6 +8,7 @@ use App\Core\Auth;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\EstablishmentClock;
 use DateTimeImmutable;
 
 final class AgendaController
@@ -17,12 +18,15 @@ final class AgendaController
         Auth::requireRole(['owner', 'employee']);
         $establishmentId = TenantContext::requireEstablishmentId();
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
+        $timezone = $now->getTimezone();
 
-        $date = trim((string) ($_GET['date'] ?? date('Y-m-d')));
-        $day = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        $date = trim((string) ($_GET['date'] ?? $now->format('Y-m-d')));
+        $day = DateTimeImmutable::createFromFormat('!Y-m-d', $date, $timezone);
         if (!$day || $day->format('Y-m-d') !== $date) {
-            $date = date('Y-m-d');
-            $day = new DateTimeImmutable('today');
+            $date = $now->format('Y-m-d');
+            $day = $now->setTime(0, 0, 0);
         }
 
         if (Auth::role() === 'employee') {
@@ -50,8 +54,12 @@ final class AgendaController
             . 'FROM appointments a JOIN services s ON s.id = a.service_id '
             . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
             . 'LEFT JOIN users client ON client.id = a.client_user_id '
-            . 'WHERE a.establishment_id = :establishment AND DATE(a.starts_at) = :date ';
-        $params = ['establishment' => $establishmentId, 'date' => $date];
+            . 'WHERE a.establishment_id = :establishment AND a.starts_at >= :day_start AND a.starts_at < :day_end ';
+        $params = [
+            'establishment' => $establishmentId,
+            'day_start' => $day->format('Y-m-d H:i:s'),
+            'day_end' => $day->modify('+1 day')->format('Y-m-d H:i:s'),
+        ];
         if (Auth::role() === 'employee') {
             $appointmentsSql .= 'AND a.employee_user_id = :user ';
             $params['user'] = Auth::id();
