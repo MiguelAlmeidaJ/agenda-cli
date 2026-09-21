@@ -90,6 +90,8 @@ $router->get('/painel/equipe/{id}/horarios', [TeamController::class, 'schedule']
 $router->post('/painel/equipe/{id}/horarios', [TeamController::class, 'storeSchedule']);
 $router->post('/painel/equipe/{id}/bloqueios', [TeamController::class, 'storeBlock']);
 $router->post('/painel/equipe/{id}/bloqueios/{blockId}/remover', [TeamController::class, 'deleteBlock']);
+$router->post('/painel/equipe/{id}/ausencias', [TeamController::class, 'storeAbsence']);
+$router->post('/painel/equipe/{id}/ausencias/{absenceId}/remover', [TeamController::class, 'deleteAbsence']);
 
 $router->get('/painel/horarios', [ScheduleController::class, 'index']);
 $router->post('/painel/horarios', [ScheduleController::class, 'storeWeeklyHours']);
