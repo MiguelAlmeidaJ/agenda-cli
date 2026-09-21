@@ -267,7 +267,7 @@ final class PanelController
         $pdo = Database::connection();
         $role = Auth::role();
 
-        $sql = 'SELECT a.*, e.name AS establishment_name, s.name AS service_name, '
+        $sql = 'SELECT a.*, e.name AS establishment_name, e.timezone AS establishment_timezone, s.name AS service_name, '
             . 'employee.name AS employee_name, COALESCE(customer.name, client.name, "Cliente") AS client_name '
             . 'FROM appointments a '
             . 'JOIN establishments e ON e.id = a.establishment_id '
@@ -293,9 +293,18 @@ final class PanelController
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
+        $appointments = $stmt->fetchAll();
+        $clock = new EstablishmentClock();
+        foreach ($appointments as &$appointment) {
+            $timezone = (string) ($appointment['establishment_timezone'] ?: env('APP_TIMEZONE', 'America/Sao_Paulo'));
+            $appointment['is_future'] = $clock->inTimezone($timezone, (string) $appointment['starts_at'])
+                > $clock->inTimezone($timezone);
+        }
+        unset($appointment);
+
         View::render('panel/appointments', [
             'title' => 'Agendamentos',
-            'appointments' => $stmt->fetchAll(),
+            'appointments' => $appointments,
             'role' => $role,
         ]);
     }
