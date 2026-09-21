@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\BrazilHolidayService;
+use App\Services\EstablishmentClock;
 use App\Services\ScheduleRangeService;
 use DateTimeImmutable;
 
@@ -20,6 +21,9 @@ final class ScheduleController
         Auth::requireRole(['owner']);
         $establishmentId = TenantContext::requireEstablishmentId();
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
+        $today = $now->format('Y-m-d');
 
         $hoursStmt = $pdo->prepare(
             'SELECT * FROM business_hours WHERE establishment_id = :establishment ORDER BY weekday'
@@ -58,11 +62,14 @@ final class ScheduleController
 
         $exceptionsStmt = $pdo->prepare(
             'SELECT * FROM special_hours WHERE establishment_id = :establishment '
-            . 'AND special_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) '
-            . 'AND special_date <= DATE_ADD(CURDATE(), INTERVAL 730 DAY) '
+            . 'AND special_date >= :date_start AND special_date <= :date_end '
             . 'ORDER BY special_date ASC'
         );
-        $exceptionsStmt->execute(['establishment' => $establishmentId]);
+        $exceptionsStmt->execute([
+            'establishment' => $establishmentId,
+            'date_start' => $now->modify('-30 days')->format('Y-m-d'),
+            'date_end' => $now->modify('+730 days')->format('Y-m-d'),
+        ]);
         $exceptions = $exceptionsStmt->fetchAll();
         $exceptionsByDate = [];
         foreach ($exceptions as $exception) {
@@ -70,8 +77,7 @@ final class ScheduleController
         }
 
         $holidayService = new BrazilHolidayService();
-        $currentYear = (int) date('Y');
-        $today = date('Y-m-d');
+        $currentYear = (int) $now->format('Y');
         $nationalHolidays = [];
         foreach ($holidayService->betweenYears($currentYear, $currentYear + 1) as $date => $name) {
             if ($date < $today) {
@@ -96,7 +102,7 @@ final class ScheduleController
             'nationalHolidays' => $nationalHolidays,
             'specialDates' => $specialDates,
             'today' => $today,
-            'tomorrow' => (new DateTimeImmutable('tomorrow'))->format('Y-m-d'),
+            'tomorrow' => $now->modify('+1 day')->format('Y-m-d'),
         ]);
     }
 
