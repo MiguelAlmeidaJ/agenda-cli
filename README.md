@@ -81,6 +81,7 @@ mysql -u usuario -p banco < database/migrations/2026_09_21_multiple_schedule_ran
 mysql -u usuario -p banco < database/migrations/2026_09_21_public_search.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_provider_absences.sql
 mysql -u usuario -p banco < database/migrations/2026_09_21_attendance_confirmation.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_appointment_recurrence.sql
 ```
 
 As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada, proteção contra tentativas repetidas de login, experiência do cliente, múltiplas faixas de jornada e índices para a busca pública.
@@ -162,6 +163,10 @@ Cada estabelecimento possui seu próprio timezone. Horários de agenda, bloqueio
 ## Busca pública
 
 A rota `/encontre` permite pesquisar por serviço ou estabelecimento, filtrar por cidade/UF e ordenar por relevância, nome ou menor preço inicial. Quando o visitante permite acesso à localização no navegador, os resultados geocodificados podem ser reordenados por distância sem enviar a coordenada do visitante para o backend.
+
+## Agendamentos recorrentes
+
+A criação manual permite gerar séries semanais a cada 1 a 4 semanas, com 2 a 52 ocorrências. Todas as datas usam o mesmo motor de disponibilidade e são validadas antes do commit; se qualquer ocorrência estiver indisponível, nenhuma é criada. Cada atendimento continua independente para reagendamento/cancelamento, e a equipe pode cancelar uma ocorrência e todas as seguintes da série usando a posição da série.
 
 ## Confirmação de presença
 
