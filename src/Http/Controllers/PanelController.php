@@ -9,6 +9,8 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\EstablishmentClock;
+use DateTimeImmutable;
 
 final class PanelController
 {
@@ -32,15 +34,21 @@ final class PanelController
                 'Agendamentos' => (int) $pdo->query('SELECT COUNT(*) FROM appointments')->fetchColumn(),
             ];
         } elseif ($role === 'client') {
-            $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE client_user_id = :user AND starts_at >= NOW() AND status IN ("pending", "confirmed")');
-            $stmt->execute(['user' => Auth::id()]);
-            $metrics = ['Próximos agendamentos' => (int) $stmt->fetchColumn()];
+            $metrics = ['Próximos agendamentos' => $this->clientUpcomingCount($pdo, (int) Auth::id())];
         } else {
             $establishmentId = TenantContext::requireEstablishmentId();
+            $clock = new EstablishmentClock();
+            $now = $clock->now($pdo, $establishmentId);
+            [$todayStart, $todayEnd] = $clock->dayBounds($now);
 
             if ($role === 'employee') {
-                $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment AND employee_user_id = :user AND DATE(starts_at) = CURDATE() AND status IN ("pending", "confirmed")');
-                $stmt->execute(['establishment' => $establishmentId, 'user' => Auth::id()]);
+                $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment AND employee_user_id = :user AND starts_at>=:today_start AND starts_at<:today_end AND status IN ("pending", "confirmed")');
+                $stmt->execute([
+                    'establishment' => $establishmentId,
+                    'user' => Auth::id(),
+                    'today_start' => $clock->sql($todayStart),
+                    'today_end' => $clock->sql($todayEnd),
+                ]);
                 $metrics = ['Atendimentos hoje' => (int) $stmt->fetchColumn()];
             } else {
                 $establishment = $pdo->prepare('SELECT id, name, slug FROM establishments WHERE id = :establishment LIMIT 1');
@@ -56,17 +64,25 @@ final class PanelController
                     'SELECT COUNT(*) AS total, COALESCE(SUM(price), 0) AS revenue, '
                     . 'COALESCE(SUM(status = "pending"), 0) AS pending '
                     . 'FROM appointments WHERE establishment_id = :establishment '
-                    . 'AND DATE(starts_at) = CURDATE() AND status IN ("pending", "confirmed")'
+                    . 'AND starts_at>=:today_start AND starts_at<:today_end AND status IN ("pending", "confirmed")'
                 );
-                $today->execute(['establishment' => $establishmentId]);
+                $today->execute([
+                    'establishment' => $establishmentId,
+                    'today_start' => $clock->sql($todayStart),
+                    'today_end' => $clock->sql($todayEnd),
+                ]);
                 $todaySummary = $today->fetch() ?: ['total' => 0, 'revenue' => 0, 'pending' => 0];
 
                 $week = $pdo->prepare(
                     'SELECT COUNT(*) FROM appointments WHERE establishment_id = :establishment '
-                    . 'AND starts_at >= NOW() AND starts_at < DATE_ADD(NOW(), INTERVAL 7 DAY) '
+                    . 'AND starts_at >= :now AND starts_at < :week_end '
                     . 'AND status IN ("pending", "confirmed")'
                 );
-                $week->execute(['establishment' => $establishmentId]);
+                $week->execute([
+                    'establishment' => $establishmentId,
+                    'now' => $clock->sql($now),
+                    'week_end' => $clock->sql($now->modify('+7 days')),
+                ]);
 
                 $nextAppointments = $pdo->prepare(
                     'SELECT a.id, a.starts_at, a.status, a.price, s.name AS service_name, '
@@ -76,11 +92,14 @@ final class PanelController
                     . 'JOIN users employee ON employee.id = a.employee_user_id '
                     . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
                     . 'LEFT JOIN users client ON client.id = a.client_user_id '
-                    . 'WHERE a.establishment_id = :establishment AND a.starts_at >= NOW() '
+                    . 'WHERE a.establishment_id = :establishment AND a.starts_at >= :now '
                     . 'AND a.status IN ("pending", "confirmed") '
                     . 'ORDER BY a.starts_at ASC LIMIT 6'
                 );
-                $nextAppointments->execute(['establishment' => $establishmentId]);
+                $nextAppointments->execute([
+                    'establishment' => $establishmentId,
+                    'now' => $clock->sql($now),
+                ]);
 
                 $metrics = [
                     'Agendamentos hoje' => (int) $todaySummary['total'],
@@ -279,6 +298,28 @@ final class PanelController
             'appointments' => $stmt->fetchAll(),
             'role' => $role,
         ]);
+    }
+
+    private function clientUpcomingCount(\PDO $pdo, int $userId): int
+    {
+        $stmt = $pdo->prepare(
+            'SELECT a.starts_at,e.timezone FROM appointments a '
+            . 'JOIN establishments e ON e.id=a.establishment_id '
+            . 'WHERE a.client_user_id=:user AND a.status IN ("pending","confirmed")'
+        );
+        $stmt->execute(['user' => $userId]);
+
+        $clock = new EstablishmentClock();
+        $count = 0;
+        foreach ($stmt->fetchAll() as $appointment) {
+            $timezone = (string) ($appointment['timezone'] ?: env('APP_TIMEZONE', 'America/Sao_Paulo'));
+            $start = $clock->inTimezone($timezone, (string) $appointment['starts_at']);
+            $now = $clock->inTimezone($timezone);
+            if ($start >= $now) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     private function providersForEstablishment(\PDO $pdo, int $establishmentId): array
