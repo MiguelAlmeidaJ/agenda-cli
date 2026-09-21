@@ -289,6 +289,15 @@ final class AppointmentController
                 'establishment' => $establishmentId,
             ]);
 
+            if (in_array($targetStatus, ['completed', 'cancelled', 'no_show'], true)) {
+                $clock = new EstablishmentClock();
+                $invalidatedAt = $clock->sql($clock->now($pdo, $establishmentId));
+                $pdo->prepare(
+                    'UPDATE appointment_attendance_tokens SET used_at=:used '
+                    . 'WHERE appointment_id=:appointment AND used_at IS NULL'
+                )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
+            }
+
             $this->recordEvent($pdo, $appointmentId, $establishmentId, 'status_changed', $currentStatus, $targetStatus);
             $pdo->commit();
             flash('success', 'Status do agendamento atualizado.');
@@ -453,7 +462,8 @@ final class AppointmentController
             $providerName = (string) ($providerNameStmt->fetchColumn() ?: 'Profissional');
 
             $update = $pdo->prepare(
-                'UPDATE appointments SET employee_user_id = :employee, starts_at = :starts, ends_at = :ends '
+                'UPDATE appointments SET employee_user_id = :employee, starts_at = :starts, ends_at = :ends, '
+                . 'attendance_response = "pending", attendance_responded_at = NULL '
                 . 'WHERE id = :id AND establishment_id = :establishment'
             );
             $update->execute([
@@ -474,6 +484,18 @@ final class AppointmentController
                 null,
                 $oldDescription . ' → ' . $newDescription
             );
+
+            $clock = new EstablishmentClock();
+            $invalidatedAt = $clock->sql($clock->now($pdo, $establishmentId));
+            $pdo->prepare(
+                'UPDATE appointment_attendance_tokens SET used_at=:used '
+                . 'WHERE appointment_id=:appointment AND used_at IS NULL'
+            )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
+            $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE appointment_id=:appointment AND status="pending" '
+                . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
+            )->execute(['appointment'=>$appointmentId]);
 
             $pdo->commit();
             flash('success', 'Agendamento reagendado com sucesso.');
