@@ -96,6 +96,39 @@ $today = (string) $today;
           </div>
         </div>
 
+        <div class="manual-booking-step">
+          <span class="booking-step-number"><i class="bi bi-arrow-repeat"></i></span>
+          <div class="flex-grow-1">
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" name="recurring" value="1" id="manual-recurring">
+              <label class="form-check-label fw-semibold" for="manual-recurring">Repetir este agendamento</label>
+            </div>
+            <div class="small text-muted-app mb-3">Cria uma série no mesmo dia da semana, horário e profissional. Todas as ocorrências são validadas antes de salvar.</div>
+
+            <div class="row g-3 d-none" id="manual-recurrence-fields">
+              <div class="col-sm-6">
+                <label class="form-label" for="manual-interval-weeks">Frequência</label>
+                <select class="form-select" name="interval_weeks" id="manual-interval-weeks">
+                  <option value="1">Toda semana</option>
+                  <option value="2">A cada 2 semanas</option>
+                  <option value="3">A cada 3 semanas</option>
+                  <option value="4">A cada 4 semanas</option>
+                </select>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="manual-occurrences">Quantidade de atendimentos</label>
+                <input class="form-control" type="number" name="occurrences" id="manual-occurrences" min="2" max="52" value="4">
+              </div>
+              <div class="col-12">
+                <div class="booking-inline-alert" id="manual-recurrence-preview">
+                  <i class="bi bi-calendar3"></i>
+                  <span>Selecione uma data para visualizar a série.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="manual-booking-step border-0 pb-0">
           <span class="booking-step-number"><i class="bi bi-chat-left-text"></i></span>
           <div class="flex-grow-1">
@@ -142,6 +175,11 @@ const selectedTimeBox = document.getElementById('manual-selected-time');
 const submitButton = document.getElementById('manual-submit');
 const summary = document.getElementById('manual-summary');
 const customerSelect = document.getElementById('manual-customer');
+const recurringInput = document.getElementById('manual-recurring');
+const recurrenceFields = document.getElementById('manual-recurrence-fields');
+const intervalWeeksInput = document.getElementById('manual-interval-weeks');
+const occurrencesInput = document.getElementById('manual-occurrences');
+const recurrencePreview = document.getElementById('manual-recurrence-preview');
 let chosenProviderName = '';
 
 serviceSelect.addEventListener('change', () => {
@@ -173,10 +211,24 @@ providerSelect.addEventListener('change', () => {
 
 dateInput.addEventListener('change', () => {
   resetManualTime();
+  updateRecurrencePreview();
   updateManualSummary();
   loadManualSlots();
 });
 customerSelect?.addEventListener('change', updateManualSummary);
+recurringInput?.addEventListener('change', () => {
+  recurrenceFields?.classList.toggle('d-none', !recurringInput.checked);
+  updateRecurrencePreview();
+  updateManualSummary();
+});
+intervalWeeksInput?.addEventListener('change', () => {
+  updateRecurrencePreview();
+  updateManualSummary();
+});
+occurrencesInput?.addEventListener('input', () => {
+  updateRecurrencePreview();
+  updateManualSummary();
+});
 
 async function loadManualSlots() {
   if (!serviceSelect.value || providerSelect.value === '' || !dateInput.value) {
@@ -227,11 +279,33 @@ function updateManualSummary() {
   const serviceOption = serviceSelect.options[serviceSelect.selectedIndex];
   const customerOption = customerSelect?.options[customerSelect.selectedIndex];
   if (serviceSelect.value && customerSelect?.value) {
-    summary.textContent = `${customerOption.textContent.trim()} · ${serviceOption.dataset.name || serviceOption.textContent.trim()}${timeInput.value ? ` · ${dateInput.value.split('-').reverse().join('/')} às ${timeInput.value}` : ''}`;
+    let recurrenceText = '';
+    if (recurringInput?.checked) {
+      const count = Math.max(2, Math.min(52, Number(occurrencesInput?.value || 4)));
+      recurrenceText = ` · série com ${count} atendimentos`;
+    }
+    summary.textContent = `${customerOption.textContent.trim()} · ${serviceOption.dataset.name || serviceOption.textContent.trim()}${timeInput.value ? ` · ${dateInput.value.split('-').reverse().join('/')} às ${timeInput.value}` : ''}${recurrenceText}`;
   } else {
     summary.textContent = 'Preencha os dados para criar o agendamento.';
   }
   submitButton.disabled = !(customerSelect?.value && serviceSelect.value && employeeInput.value && dateInput.value && timeInput.value);
+}
+
+function updateRecurrencePreview() {
+  if (!recurrencePreview || !recurringInput?.checked) return;
+  if (!dateInput.value) {
+    recurrencePreview.innerHTML = '<i class="bi bi-calendar3"></i><span>Selecione uma data para visualizar a série.</span>';
+    return;
+  }
+
+  const interval = Math.max(1, Math.min(4, Number(intervalWeeksInput?.value || 1)));
+  const count = Math.max(2, Math.min(52, Number(occurrencesInput?.value || 4)));
+  const [year, month, day] = dateInput.value.split('-').map(Number);
+  const first = new Date(year, month - 1, day, 12, 0, 0);
+  const last = new Date(first);
+  last.setDate(last.getDate() + ((count - 1) * interval * 7));
+  const format = value => new Intl.DateTimeFormat('pt-BR').format(value);
+  recurrencePreview.innerHTML = `<i class="bi bi-calendar3"></i><span>${count} atendimentos: ${format(first)} até ${format(last)}, a cada ${interval} semana${interval === 1 ? '' : 's'}.</span>`;
 }
 
 function escapeManual(value) {
