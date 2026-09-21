@@ -21,6 +21,7 @@ final class NotificationService
             'reminder_24h_enabled' => 1,
             'reminder_2h_enabled' => 0,
             'waitlist_enabled' => 1,
+            'waitlist_offer_minutes' => 30,
         ];
     }
 
@@ -31,7 +32,7 @@ final class NotificationService
         if ((int) $settings['whatsapp_enabled'] !== 1) return $result;
 
         $rules = [
-            'confirmation' => [(int) $settings['confirmation_enabled'], 'a.status="confirmed" AND a.starts_at>NOW() AND a.created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)', 'appointment_confirmation'],
+            'confirmation' => [(int) $settings['confirmation_enabled'], 'a.status="confirmed" AND a.starts_at>NOW() AND (a.created_at>=DATE_SUB(NOW(), INTERVAL 7 DAY) OR a.updated_at>=DATE_SUB(NOW(), INTERVAL 7 DAY))', 'appointment_confirmation'],
             'cancellation' => [(int) $settings['cancellation_enabled'], 'a.status="cancelled" AND a.updated_at>=DATE_SUB(NOW(), INTERVAL 7 DAY)', 'appointment_cancelled'],
             'reminder_24h' => [(int) $settings['reminder_24h_enabled'], 'a.status="confirmed" AND a.starts_at BETWEEN DATE_ADD(NOW(), INTERVAL 23 HOUR) AND DATE_ADD(NOW(), INTERVAL 25 HOUR)', 'reminder_24h'],
             'reminder_2h' => [(int) $settings['reminder_2h_enabled'], 'a.status="confirmed" AND a.starts_at BETWEEN DATE_ADD(NOW(), INTERVAL 90 MINUTE) AND DATE_ADD(NOW(), INTERVAL 150 MINUTE)', 'reminder_2h'],
@@ -45,20 +46,87 @@ final class NotificationService
     public function queueWaitlistMatch(int $matchId): bool
     {
         $pdo = Database::connection();
-        $stmt = $pdo->prepare('SELECT wm.*, w.customer_id, w.id waitlist_id, c.name customer_name, c.phone, s.name service_name, e.name establishment_name, u.name employee_name FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id JOIN customers c ON c.id=w.customer_id JOIN services s ON s.id=w.service_id JOIN establishments e ON e.id=wm.establishment_id JOIN users u ON u.id=wm.employee_user_id WHERE wm.id=:id AND w.status="waiting" LIMIT 1');
-        $stmt->execute(['id' => $matchId]);
-        $row = $stmt->fetch();
-        if (!$row) return false;
-        $settings = $this->settings((int) $row['establishment_id']);
-        if ((int) $settings['whatsapp_enabled'] !== 1 || (int) $settings['waitlist_enabled'] !== 1) return false;
-        $phone = $this->digits((string) ($row['phone'] ?? ''));
-        if ($phone === '') return false;
+        $pdo->beginTransaction();
 
-        $message = sprintf('Oi %s! Surgiu um horário para %s em %s às %s com %s no %s. Entre em contato para confirmar.', $row['customer_name'], $row['service_name'], date('d/m/Y', strtotime((string) $row['slot_start'])), date('H:i', strtotime((string) $row['slot_start'])), $row['employee_name'], $row['establishment_name']);
-        $dedupe = 'waitlist:' . $row['waitlist_id'] . ':' . $row['employee_user_id'] . ':' . date('YmdHi', strtotime((string) $row['slot_start']));
-        $queued = $this->queue((int) $row['establishment_id'], (int) $row['customer_id'], null, (int) $row['waitlist_id'], 'waitlist_slot_available', $phone, $message, $dedupe);
-        if ($queued) $pdo->prepare('UPDATE waitlist_matches SET status="queued" WHERE id=:id AND status="available"')->execute(['id' => $matchId]);
-        return $queued;
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT wm.*,w.customer_id,w.id waitlist_id,c.name customer_name,c.phone,'
+                . 's.name service_name,e.name establishment_name,u.name employee_name '
+                . 'FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id '
+                . 'JOIN customers c ON c.id=w.customer_id JOIN services s ON s.id=w.service_id '
+                . 'JOIN establishments e ON e.id=wm.establishment_id JOIN users u ON u.id=wm.employee_user_id '
+                . 'WHERE wm.id=:id AND w.status="waiting" AND wm.status="available" LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute(['id' => $matchId]);
+            $row = $stmt->fetch();
+            if (!$row) {
+                $pdo->rollBack();
+                return false;
+            }
+
+            $settings = $this->settings((int) $row['establishment_id']);
+            if ((int) $settings['whatsapp_enabled'] !== 1 || (int) $settings['waitlist_enabled'] !== 1) {
+                $pdo->rollBack();
+                return false;
+            }
+
+            $phone = $this->digits((string) ($row['phone'] ?? ''));
+            if ($phone === '') {
+                $pdo->rollBack();
+                return false;
+            }
+
+            $offerMinutes = max(5, min(1440, (int) ($settings['waitlist_offer_minutes'] ?? 30)));
+            $token = bin2hex(random_bytes(32));
+            $tokenHash = hash('sha256', $token);
+            $expiresAt = date('Y-m-d H:i:s', time() + ($offerMinutes * 60));
+            $acceptUrl = url('/lista-espera/oferta/' . $token);
+
+            $message = sprintf(
+                'Oi %s! Surgiu um horário para %s em %s às %s com %s no %s. Você pode confirmar pelo link até %s; a vaga será validada no momento da confirmação: %s',
+                $row['customer_name'],
+                $row['service_name'],
+                date('d/m/Y', strtotime((string) $row['slot_start'])),
+                date('H:i', strtotime((string) $row['slot_start'])),
+                $row['employee_name'],
+                $row['establishment_name'],
+                date('H:i', strtotime($expiresAt)),
+                $acceptUrl
+            );
+            $dedupe = 'waitlist:' . $row['waitlist_id'] . ':' . $row['employee_user_id'] . ':' . date('YmdHi', strtotime((string) $row['slot_start']));
+
+            $queued = $this->queue(
+                (int) $row['establishment_id'],
+                (int) $row['customer_id'],
+                null,
+                (int) $row['waitlist_id'],
+                'waitlist_slot_available',
+                $phone,
+                $message,
+                $dedupe
+            );
+            if (!$queued) {
+                $pdo->rollBack();
+                return false;
+            }
+
+            $pdo->prepare(
+                'UPDATE waitlist_matches SET status="queued",offer_token_hash=:token,offer_expires_at=:expires '
+                . 'WHERE id=:id AND status="available"'
+            )->execute([
+                'token' => $tokenHash,
+                'expires' => $expiresAt,
+                'id' => $matchId,
+            ]);
+
+            $pdo->commit();
+            return true;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     private function queueAppointments(int $establishmentId, string $condition, string $event): int

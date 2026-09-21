@@ -11,6 +11,8 @@ final class WaitlistAutomationService
     public function scanEstablishment(int $establishmentId, int $limit = 200): array
     {
         $pdo = Database::connection();
+        $this->expireOffers($establishmentId);
+
         $stmt = $pdo->prepare(
             'SELECT w.id,w.service_id,w.preferred_employee_user_id,w.desired_date,w.time_period '
             . 'FROM waitlist_entries w JOIN services s ON s.id=w.service_id '
@@ -56,8 +58,52 @@ final class WaitlistAutomationService
             if ($notifications->queueWaitlistMatch($matchId)) $queued++;
         }
 
-        $pdo->prepare('UPDATE waitlist_matches SET status="expired" WHERE establishment_id=:establishment AND status IN ("available","queued") AND slot_start<NOW()')->execute(['establishment'=>$establishmentId]);
+        $pdo->prepare('UPDATE waitlist_matches SET status="expired" WHERE establishment_id=:establishment AND status="available" AND slot_start<NOW()')->execute(['establishment'=>$establishmentId]);
         return ['matched' => $matched, 'queued' => $queued];
+    }
+
+    public function expireOffers(int $establishmentId): int
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT id,waitlist_entry_id FROM waitlist_matches '
+                . 'WHERE establishment_id=:establishment AND status IN ("queued","notified") '
+                . 'AND (slot_start<=NOW() OR (offer_expires_at IS NOT NULL AND offer_expires_at<=NOW())) FOR UPDATE'
+            );
+            $stmt->execute(['establishment' => $establishmentId]);
+            $expired = $stmt->fetchAll();
+
+            $entryIds = [];
+            foreach ($expired as $match) {
+                $pdo->prepare('UPDATE waitlist_matches SET status="expired" WHERE id=:id')
+                    ->execute(['id' => $match['id']]);
+                $entryId = (int) $match['waitlist_entry_id'];
+                $entryIds[$entryId] = true;
+
+                $pdo->prepare(
+                    'UPDATE notification_outbox SET status="cancelled" '
+                    . 'WHERE waitlist_entry_id=:entry AND event_type="waitlist_slot_available" AND status="pending"'
+                )->execute(['entry' => $entryId]);
+            }
+
+            foreach (array_keys($entryIds) as $entryId) {
+                $pdo->prepare(
+                    'UPDATE waitlist_entries SET status="waiting" '
+                    . 'WHERE id=:id AND establishment_id=:establishment AND status="notified" AND desired_date>=CURDATE()'
+                )->execute(['id' => $entryId, 'establishment' => $establishmentId]);
+            }
+
+            $pdo->commit();
+            return count($expired);
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
     }
 
     private function expireEntryMatches(\PDO $pdo, int $entryId): void
