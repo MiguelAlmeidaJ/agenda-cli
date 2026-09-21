@@ -9,6 +9,7 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\EstablishmentClock;
 use App\Services\NotificationService;
 use App\Services\WaitlistAutomationService;
 
@@ -85,7 +86,10 @@ final class NotificationController
             if (!$row) throw new \RuntimeException('Notificação não encontrada.');
             if (!in_array($row['status'], ['pending','failed'], true)) throw new \RuntimeException('Esta notificação já foi finalizada.');
 
-            $pdo->prepare('UPDATE notification_outbox SET status="sent",sent_at=NOW(),attempts=attempts+1,last_error=NULL WHERE id=:id')->execute(['id'=>$row['id']]);
+            $clock = new EstablishmentClock();
+            $sentAt = $clock->sql($clock->now($pdo, $establishmentId));
+            $pdo->prepare('UPDATE notification_outbox SET status="sent",sent_at=:sent_at,attempts=attempts+1,last_error=NULL WHERE id=:id')
+                ->execute(['sent_at'=>$sentAt,'id'=>$row['id']]);
             if (!empty($row['waitlist_entry_id'])) {
                 $pdo->prepare('UPDATE waitlist_entries SET status="notified" WHERE id=:id AND establishment_id=:establishment AND status="waiting"')->execute(['id'=>$row['waitlist_entry_id'],'establishment'=>$establishmentId]);
                 $pdo->prepare('UPDATE waitlist_matches SET status="notified" WHERE waitlist_entry_id=:id AND establishment_id=:establishment AND status="queued"')->execute(['id'=>$row['waitlist_entry_id'],'establishment'=>$establishmentId]);
