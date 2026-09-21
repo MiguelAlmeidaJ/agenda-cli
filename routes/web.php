@@ -109,6 +109,7 @@ $router->get('/painel/agendamentos/novo', [AppointmentController::class, 'create
 $router->get('/painel/agendamentos/novo/horarios', [AppointmentController::class, 'newAvailability']);
 $router->post('/painel/agendamentos/novo', [AppointmentController::class, 'store']);
 $router->post('/painel/agendamentos/{id}/status', [AppointmentController::class, 'status']);
+$router->post('/painel/agendamentos/{id}/serie/cancelar-futuros', [AppointmentController::class, 'cancelSeriesFrom']);
 $router->get('/painel/agendamentos/{id}/reagendar', [BookingController::class, 'rescheduleForm']);
 $router->get('/painel/agendamentos/{id}/reagendar/horarios', [BookingController::class, 'rescheduleAvailability']);
 $router->post('/painel/agendamentos/{id}/reagendar', [BookingController::class, 'reschedule']);
