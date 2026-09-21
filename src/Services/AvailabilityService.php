@@ -84,6 +84,28 @@ final class AvailabilityService
         ]);
         $blocked = $blockedStmt->fetchAll();
 
+        try {
+            $absenceStmt = $pdo->prepare(
+                'SELECT kind,starts_on,ends_on,weekday,all_day,starts_at,ends_at FROM provider_absences '
+                . 'WHERE establishment_id=:establishment AND user_id=:employee '
+                . 'AND starts_on<=:date_start AND (ends_on IS NULL OR ends_on>=:date_end) '
+                . 'AND (kind="date_range" OR (kind="weekly" AND weekday=:weekday))'
+            );
+            $absenceStmt->execute([
+                'establishment' => $establishmentId,
+                'employee' => $employeeId,
+                'date_start' => $date,
+                'date_end' => $date,
+                'weekday' => (int) $day->format('N'),
+            ]);
+            $blocked = array_merge(
+                $blocked,
+                (new ProviderAbsenceService())->periodsForDate($absenceStmt->fetchAll(), $day)
+            );
+        } catch (\PDOException) {
+            // Compatibilidade durante deploy antes da migration de ausências.
+        }
+
         $minimumStart = $now->modify('+' . (int) $settings['min_notice_minutes'] . ' minutes');
         $bufferMinutes = (int) $settings['buffer_minutes'];
         $slots = [];

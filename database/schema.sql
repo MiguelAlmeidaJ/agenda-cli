@@ -158,6 +158,27 @@ CREATE TABLE IF NOT EXISTS blocked_periods (
     CONSTRAINT fk_blocked_periods_employee FOREIGN KEY (employee_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS provider_absences (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    kind ENUM('date_range','weekly') NOT NULL,
+    starts_on DATE NOT NULL,
+    ends_on DATE NULL,
+    weekday TINYINT UNSIGNED NULL COMMENT '1=segunda ... 7=domingo',
+    all_day TINYINT(1) NOT NULL DEFAULT 1,
+    starts_at TIME NULL,
+    ends_at TIME NULL,
+    reason VARCHAR(190) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_provider_absences_lookup (establishment_id, user_id, starts_on, ends_on, kind),
+    KEY idx_provider_absences_weekly (establishment_id, user_id, weekday, starts_on),
+    CONSTRAINT fk_provider_absences_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_provider_absences_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT chk_provider_absences_weekday CHECK (weekday IS NULL OR weekday BETWEEN 1 AND 7)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS appointments (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     establishment_id BIGINT UNSIGNED NOT NULL,
