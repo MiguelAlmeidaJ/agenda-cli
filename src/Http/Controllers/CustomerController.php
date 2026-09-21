@@ -9,6 +9,7 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\EstablishmentClock;
 
 final class CustomerController
 {
@@ -17,17 +18,19 @@ final class CustomerController
         Auth::requireRole(['owner', 'employee']);
         $establishmentId = TenantContext::requireEstablishmentId();
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->sql($clock->now($pdo, $establishmentId));
         $query = trim((string) ($_GET['q'] ?? ''));
 
         $sql = 'SELECT c.id, c.name, c.email, c.phone, c.user_id, c.created_at, '
             . 'COUNT(a.id) AS appointment_count, '
             . 'COALESCE(SUM(a.status = "completed"), 0) AS completed_count, '
             . 'MAX(CASE WHEN a.status = "completed" THEN a.starts_at END) AS last_visit, '
-            . 'MIN(CASE WHEN a.status IN ("pending", "confirmed") AND a.starts_at >= NOW() THEN a.starts_at END) AS next_appointment '
+            . 'MIN(CASE WHEN a.status IN ("pending", "confirmed") AND a.starts_at >= :now THEN a.starts_at END) AS next_appointment '
             . 'FROM customers c '
             . 'LEFT JOIN appointments a ON a.customer_id = c.id AND a.establishment_id = c.establishment_id '
             . 'WHERE c.establishment_id = :establishment ';
-        $params = ['establishment' => $establishmentId];
+        $params = ['establishment' => $establishmentId, 'now' => $now];
 
         if ($query !== '') {
             $sql .= 'AND (c.name LIKE :q_name OR c.email LIKE :q_email OR c.phone LIKE :q_phone) ';
@@ -122,6 +125,8 @@ final class CustomerController
         $establishmentId = TenantContext::requireEstablishmentId();
         $customerId = (int) $id;
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->sql($clock->now($pdo, $establishmentId));
 
         $customerStmt = $pdo->prepare(
             'SELECT c.*, u.status AS user_status FROM customers c '
@@ -141,10 +146,14 @@ final class CustomerController
             . 'COALESCE(SUM(status = "completed"), 0) AS completed, '
             . 'COALESCE(SUM(CASE WHEN status = "completed" THEN price ELSE 0 END), 0) AS revenue, '
             . 'MAX(CASE WHEN status = "completed" THEN starts_at END) AS last_visit, '
-            . 'MIN(CASE WHEN status IN ("pending", "confirmed") AND starts_at >= NOW() THEN starts_at END) AS next_appointment '
+            . 'MIN(CASE WHEN status IN ("pending", "confirmed") AND starts_at >= :now THEN starts_at END) AS next_appointment '
             . 'FROM appointments WHERE establishment_id = :establishment AND customer_id = :customer'
         );
-        $statsStmt->execute(['establishment' => $establishmentId, 'customer' => $customerId]);
+        $statsStmt->execute([
+            'establishment' => $establishmentId,
+            'customer' => $customerId,
+            'now' => $now,
+        ]);
         $stats = $statsStmt->fetch() ?: [];
 
         $appointments = $pdo->prepare(
