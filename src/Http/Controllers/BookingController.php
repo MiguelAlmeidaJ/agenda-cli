@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Core\Auth;
 use App\Core\Csrf;
 use App\Core\Database;
+use App\Core\View;
 use App\Services\AvailabilityService;
 use App\Services\CustomerService;
 use DateInterval;
@@ -158,6 +159,161 @@ final class BookingController
         }
     }
 
+
+    public function rescheduleForm(string $id): void
+    {
+        Auth::requireRole(['client']);
+        $pdo = Database::connection();
+        $appointment = $this->clientAppointment($pdo, (int) $id);
+        if (!$appointment) {
+            http_response_code(404);
+            View::render('errors/404', ['title' => 'Agendamento não encontrado']);
+            return;
+        }
+
+        try {
+            $this->assertClientCanReschedule($appointment);
+        } catch (\RuntimeException $exception) {
+            flash('error', $exception->getMessage());
+            redirect('/painel/agendamentos');
+        }
+
+        $providers = $pdo->prepare(
+            'SELECT u.id,u.name FROM employee_services es '
+            . 'JOIN users u ON u.id=es.employee_user_id '
+            . 'JOIN establishments e ON e.id=:establishment '
+            . 'LEFT JOIN establishment_users eu ON eu.establishment_id=e.id AND eu.user_id=u.id '
+            . 'WHERE es.service_id=:service AND u.status="active" '
+            . 'AND (u.id=e.owner_user_id OR (eu.role="employee" AND eu.active=1)) ORDER BY u.name'
+        );
+        $providers->execute([
+            'establishment' => $appointment['establishment_id'],
+            'service' => $appointment['service_id'],
+        ]);
+
+        View::render('panel/client_appointment_reschedule', [
+            'title' => 'Reagendar atendimento',
+            'appointment' => $appointment,
+            'providers' => $providers->fetchAll(),
+        ]);
+    }
+
+    public function rescheduleAvailability(string $id): void
+    {
+        Auth::requireRole(['client']);
+        header('Content-Type: application/json; charset=utf-8');
+
+        $appointmentId = (int) $id;
+        $employeeId = (int) ($_GET['employee_id'] ?? 0);
+        $date = trim((string) ($_GET['date'] ?? ''));
+        $appointment = $this->clientAppointment(Database::connection(), $appointmentId);
+
+        try {
+            if (!$appointment || $employeeId <= 0 || $date === '') {
+                throw new \RuntimeException('Dados incompletos.');
+            }
+            $this->assertClientCanReschedule($appointment);
+            $slots = (new AvailabilityService())->slots(
+                (int) $appointment['establishment_id'],
+                (int) $appointment['service_id'],
+                $employeeId,
+                $date,
+                $appointmentId
+            );
+            echo json_encode(['slots' => $slots], JSON_UNESCAPED_UNICODE);
+        } catch (\RuntimeException $exception) {
+            http_response_code(422);
+            echo json_encode(['slots' => [], 'error' => $exception->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public function reschedule(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $appointmentId = (int) $id;
+        $employeeId = (int) ($_POST['employee_id'] ?? 0);
+        $date = trim((string) ($_POST['date'] ?? ''));
+        $time = trim((string) ($_POST['time'] ?? ''));
+        $pdo = Database::connection();
+
+        $pdo->beginTransaction();
+        try {
+            $appointment = $this->clientAppointment($pdo, $appointmentId, true);
+            if (!$appointment) {
+                throw new \RuntimeException('Agendamento não encontrado.');
+            }
+            $this->assertClientCanReschedule($appointment);
+            if ($employeeId <= 0 || $date === '' || $time === '') {
+                throw new \RuntimeException('Selecione profissional, data e horário.');
+            }
+
+            $providerLock = $pdo->prepare('SELECT id FROM users WHERE id=:provider AND status="active" FOR UPDATE');
+            $providerLock->execute(['provider' => $employeeId]);
+            if (!$providerLock->fetchColumn()) {
+                throw new \RuntimeException('Profissional indisponível.');
+            }
+
+            $slots = (new AvailabilityService())->slots(
+                (int) $appointment['establishment_id'],
+                (int) $appointment['service_id'],
+                $employeeId,
+                $date,
+                $appointmentId
+            );
+            if (!in_array($time, $slots, true)) {
+                throw new \RuntimeException('Esse horário não está mais disponível.');
+            }
+
+            $timezone = new DateTimeZone((string) $appointment['timezone']);
+            $startsAt = new DateTimeImmutable($date . ' ' . $time . ':00', $timezone);
+            $endsAt = $startsAt->add(new DateInterval('PT' . (int) $appointment['duration_minutes'] . 'M'));
+            $oldDescription = date('d/m/Y H:i', strtotime((string) $appointment['starts_at'])) . ' · ' . $appointment['employee_name'];
+
+            $providerNameStmt = $pdo->prepare('SELECT name FROM users WHERE id=:id LIMIT 1');
+            $providerNameStmt->execute(['id' => $employeeId]);
+            $providerName = (string) ($providerNameStmt->fetchColumn() ?: 'Profissional');
+
+            $pdo->prepare(
+                'UPDATE appointments SET employee_user_id=:employee,starts_at=:starts,ends_at=:ends '
+                . 'WHERE id=:id AND client_user_id=:client'
+            )->execute([
+                'employee' => $employeeId,
+                'starts' => $startsAt->format('Y-m-d H:i:s'),
+                'ends' => $endsAt->format('Y-m-d H:i:s'),
+                'id' => $appointmentId,
+                'client' => Auth::id(),
+            ]);
+
+            $pdo->prepare(
+                'INSERT INTO appointment_events (appointment_id,establishment_id,user_id,event_type,details) '
+                . 'VALUES (:appointment,:establishment,:user,"rescheduled",:details)'
+            )->execute([
+                'appointment' => $appointmentId,
+                'establishment' => $appointment['establishment_id'],
+                'user' => Auth::id(),
+                'details' => $oldDescription . ' → ' . $startsAt->format('d/m/Y H:i') . ' · ' . $providerName . ' (cliente)',
+            ]);
+
+            $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE appointment_id=:appointment AND status="pending" '
+                . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
+            )->execute(['appointment' => $appointmentId]);
+
+            $pdo->commit();
+            flash('success', 'Agendamento reagendado com sucesso.');
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível reagendar o atendimento.');
+        }
+
+        redirect('/painel/agendamentos');
+    }
+
     public function cancel(string $id): void
     {
         Auth::requireRole(['client']);
@@ -209,4 +365,43 @@ final class BookingController
         }
         redirect('/painel/agendamentos');
     }
+    private function clientAppointment(\PDO $pdo, int $appointmentId, bool $forUpdate = false): ?array
+    {
+        $sql = 'SELECT a.*,e.name establishment_name,e.slug establishment_slug,e.timezone,'
+            . 's.name service_name,s.duration_minutes,employee.name employee_name,'
+            . 'COALESCE(bs.reschedule_notice_minutes,0) reschedule_notice_minutes,'
+            . 'COALESCE(bs.max_advance_days,90) max_advance_days '
+            . 'FROM appointments a JOIN establishments e ON e.id=a.establishment_id '
+            . 'JOIN services s ON s.id=a.service_id JOIN users employee ON employee.id=a.employee_user_id '
+            . 'LEFT JOIN booking_settings bs ON bs.establishment_id=a.establishment_id '
+            . 'WHERE a.id=:id AND a.client_user_id=:client LIMIT 1';
+        if ($forUpdate) {
+            $sql .= ' FOR UPDATE';
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['id' => $appointmentId, 'client' => Auth::id()]);
+        $appointment = $stmt->fetch();
+        return $appointment ?: null;
+    }
+
+    private function assertClientCanReschedule(array $appointment): void
+    {
+        if (!in_array($appointment['status'], ['pending', 'confirmed'], true)) {
+            throw new \RuntimeException('Este agendamento não pode mais ser reagendado.');
+        }
+
+        $timezone = new DateTimeZone((string) $appointment['timezone']);
+        $startsAt = new DateTimeImmutable((string) $appointment['starts_at'], $timezone);
+        $now = new DateTimeImmutable('now', $timezone);
+        if ($startsAt <= $now) {
+            throw new \RuntimeException('Este atendimento já começou ou está no passado.');
+        }
+
+        $deadline = $startsAt->modify('-' . (int) $appointment['reschedule_notice_minutes'] . ' minutes');
+        if ($now > $deadline) {
+            throw new \RuntimeException('O prazo para reagendamento online já encerrou. Entre em contato com o estabelecimento.');
+        }
+    }
+
 }

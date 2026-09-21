@@ -64,9 +64,12 @@ $showActions = $canManage || $role === 'client';
         <?php elseif ($role === 'client'): ?>
           <td class="pe-4 text-end">
             <?php if (in_array($appointment['status'], ['pending', 'confirmed'], true) && strtotime((string) $appointment['starts_at']) > time()): ?>
-              <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/cancelar')) ?>" onsubmit="return confirm('Deseja cancelar este agendamento?')">
-                <?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit">Cancelar</button>
-              </form>
+              <div class="d-flex justify-content-end gap-2">
+                <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/reagendar')) ?>"><i class="bi bi-calendar-event me-1"></i>Reagendar</a>
+                <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/cancelar')) ?>" onsubmit="return confirm('Deseja cancelar este agendamento?')">
+                  <?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit">Cancelar</button>
+                </form>
+              </div>
             <?php else: ?><span class="small text-muted-app">—</span><?php endif; ?>
           </td>
         <?php endif; ?>
