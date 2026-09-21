@@ -15,6 +15,7 @@ $statusLabels = [
 $eventLabels = [
     'status_changed' => 'Status alterado',
     'rescheduled' => 'Reagendado',
+    'attendance_confirmed' => 'Presença confirmada',
 ];
 $canReschedule = in_array($appointment['status'], ['pending', 'confirmed'], true);
 ?>
@@ -75,6 +76,15 @@ $canReschedule = in_array($appointment['status'], ['pending', 'confirmed'], true
           <div><span>Profissional</span><strong><?= e($appointment['employee_name']) ?></strong></div>
           <div><span>Serviço</span><strong><?= e($appointment['service_name']) ?></strong></div>
           <div><span>Valor</span><strong>R$ <?= e(number_format((float) $appointment['price'], 2, ',', '.')) ?></strong></div>
+          <div>
+            <span>Presença</span>
+            <strong class="<?= ($appointment['attendance_response'] ?? 'pending') === 'confirmed' ? 'text-success' : '' ?>">
+              <?= ($appointment['attendance_response'] ?? 'pending') === 'confirmed' ? 'Confirmada' : 'Pendente' ?>
+            </strong>
+          </div>
+          <?php if (!empty($appointment['attendance_responded_at'])): ?>
+            <div><span>Respondido em</span><strong><?= e(date('d/m/Y H:i', strtotime((string) $appointment['attendance_responded_at']))) ?></strong></div>
+          <?php endif; ?>
         </div>
       </div>
     </div>
