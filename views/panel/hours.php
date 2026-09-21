@@ -289,33 +289,82 @@ $days = [
 </div>
 
 <script>
-document.querySelectorAll('[data-week-row]').forEach(row => {
-  const toggle = row.querySelector('[data-closed-toggle]');
-  const inputs = row.querySelectorAll('[data-time-input]');
-  const summary = row.querySelector('.schedule-day-summary');
+(() => {
+  function rangeMarkup(day, index) {
+    return `
+      <div class="row g-2 align-items-end" data-range-row>
+        <div class="col-sm-5">
+          <label class="form-label small text-muted-app mb-1">Abre</label>
+          <input class="form-control" type="time" name="ranges[${day}][${index}][opens]" value="09:00" data-range-open>
+        </div>
+        <div class="col-sm-5">
+          <label class="form-label small text-muted-app mb-1">Fecha</label>
+          <input class="form-control" type="time" name="ranges[${day}][${index}][closes]" value="18:00" data-range-close>
+        </div>
+        <div class="col-sm-2">
+          <button class="btn btn-outline-danger w-100" type="button" data-remove-range title="Remover faixa"><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+  }
 
-  function syncWeekRow() {
-    inputs.forEach(input => input.disabled = toggle.checked);
-    if (toggle.checked) {
-      summary.textContent = 'Fechado';
-    } else {
-      summary.textContent = `${inputs[0].value} às ${inputs[1].value}`;
+  function refreshDay(dayRow) {
+    const closed = dayRow.querySelector('[data-closed-toggle]').checked;
+    const inputs = dayRow.querySelectorAll('[data-range-row] input');
+    const removeButtons = dayRow.querySelectorAll('[data-remove-range]');
+    const addButton = dayRow.querySelector('[data-add-range]');
+
+    inputs.forEach(input => input.disabled = closed);
+    removeButtons.forEach(button => button.disabled = closed);
+    addButton.disabled = closed;
+
+    const ranges = [...dayRow.querySelectorAll('[data-range-row]')].map(row => {
+      const opens = row.querySelector('[data-range-open]').value;
+      const closes = row.querySelector('[data-range-close]').value;
+      return opens && closes ? `${opens}–${closes}` : '';
+    }).filter(Boolean);
+
+    dayRow.querySelector('[data-day-summary]').textContent = closed
+      ? 'Fechado'
+      : (ranges.join(' / ') || 'Adicione uma faixa');
+  }
+
+  document.querySelectorAll('[data-week-row]').forEach(dayRow => {
+    dayRow.querySelector('[data-closed-toggle]').addEventListener('change', () => refreshDay(dayRow));
+    dayRow.addEventListener('change', event => {
+      if (event.target.matches('[data-range-open], [data-range-close]')) refreshDay(dayRow);
+    });
+    dayRow.addEventListener('click', event => {
+      const remove = event.target.closest('[data-remove-range]');
+      if (remove) {
+        const list = dayRow.querySelector('[data-range-list]');
+        if (list.querySelectorAll('[data-range-row]').length > 1) {
+          remove.closest('[data-range-row]').remove();
+          refreshDay(dayRow);
+        }
+        return;
+      }
+
+      const add = event.target.closest('[data-add-range]');
+      if (!add) return;
+      const list = dayRow.querySelector('[data-range-list]');
+      if (list.querySelectorAll('[data-range-row]').length >= 8) return;
+      list.insertAdjacentHTML('beforeend', rangeMarkup(dayRow.dataset.day, Date.now()));
+      refreshDay(dayRow);
+    });
+    refreshDay(dayRow);
+  });
+
+  document.querySelectorAll('[data-special-form]').forEach(form => {
+    const mode = form.querySelector('[data-mode-select]');
+    const times = form.querySelector('[data-special-times]');
+    if (!mode || !times) return;
+
+    function syncSpecialTimes() {
+      times.classList.toggle('d-none', mode.value !== 'open');
+      times.querySelectorAll('input').forEach(input => input.required = mode.value === 'open');
     }
-  }
-  toggle.addEventListener('change', syncWeekRow);
-  inputs.forEach(input => input.addEventListener('change', syncWeekRow));
-});
-
-document.querySelectorAll('[data-special-form]').forEach(form => {
-  const mode = form.querySelector('[data-mode-select]');
-  const times = form.querySelector('[data-special-times]');
-  if (!mode || !times) return;
-
-  function syncSpecialTimes() {
-    times.classList.toggle('d-none', mode.value !== 'open');
-    times.querySelectorAll('input').forEach(input => input.required = mode.value === 'open');
-  }
-  mode.addEventListener('change', syncSpecialTimes);
-  syncSpecialTimes();
-});
+    mode.addEventListener('change', syncSpecialTimes);
+    syncSpecialTimes();
+  });
+})();
 </script>
