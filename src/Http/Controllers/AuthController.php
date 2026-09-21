@@ -44,6 +44,11 @@ final class AuthController
         }
 
         $throttle->clearEmail($email);
+        $next = $_SESSION['after_login'] ?? null;
+        unset($_SESSION['after_login']);
+        if (is_string($next) && str_starts_with($next, '/') && !str_starts_with($next, '//')) {
+            redirect($next);
+        }
         redirect('/painel');
     }
 

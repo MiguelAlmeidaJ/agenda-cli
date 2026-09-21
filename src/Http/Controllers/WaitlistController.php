@@ -9,9 +9,12 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\AvailabilityService;
 use App\Services\CustomerService;
 use App\Services\WaitlistAutomationService;
+use DateInterval;
 use DateTimeImmutable;
+use DateTimeZone;
 
 final class WaitlistController
 {
@@ -98,6 +101,179 @@ final class WaitlistController
         redirect('/estabelecimentos/' . $slug);
     }
 
+
+    public function mine(): void
+    {
+        Auth::requireRole(['client']);
+        $pdo = Database::connection();
+
+        $establishments = $pdo->prepare(
+            'SELECT DISTINCT w.establishment_id FROM waitlist_entries w '
+            . 'JOIN customers c ON c.id=w.customer_id WHERE c.user_id=:user AND w.status IN ("waiting","notified")'
+        );
+        $establishments->execute(['user' => Auth::id()]);
+        $automation = new WaitlistAutomationService();
+        foreach ($establishments->fetchAll() as $row) {
+            $automation->expireOffers((int) $row['establishment_id']);
+        }
+
+        $stmt = $pdo->prepare(
+            'SELECT w.*,e.name establishment_name,e.slug establishment_slug,s.name service_name,'
+            . 'u.name preferred_provider_name,wm.id match_id,wm.slot_start,wm.status match_status,'
+            . 'wm.offer_expires_at,mu.name matched_provider_name '
+            . 'FROM waitlist_entries w JOIN customers c ON c.id=w.customer_id '
+            . 'JOIN establishments e ON e.id=w.establishment_id JOIN services s ON s.id=w.service_id '
+            . 'LEFT JOIN users u ON u.id=w.preferred_employee_user_id '
+            . 'LEFT JOIN waitlist_matches wm ON wm.id=(SELECT wm2.id FROM waitlist_matches wm2 '
+            . 'WHERE wm2.waitlist_entry_id=w.id AND wm2.status IN ("available","queued","notified") '
+            . 'AND wm2.slot_start>NOW() AND (wm2.offer_expires_at IS NULL OR wm2.offer_expires_at>NOW()) '
+            . 'ORDER BY wm2.slot_start ASC LIMIT 1) '
+            . 'LEFT JOIN users mu ON mu.id=wm.employee_user_id '
+            . 'WHERE c.user_id=:user ORDER BY FIELD(w.status,"notified","waiting","converted","cancelled"),w.desired_date DESC,w.created_at DESC'
+        );
+        $stmt->execute(['user' => Auth::id()]);
+
+        View::render('panel/my_waitlist', [
+            'title' => 'Minha lista de espera',
+            'entries' => $stmt->fetchAll(),
+        ]);
+    }
+
+    public function cancelMine(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT w.id,w.status FROM waitlist_entries w JOIN customers c ON c.id=w.customer_id '
+                . 'WHERE w.id=:id AND c.user_id=:user LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute(['id' => (int) $id, 'user' => Auth::id()]);
+            $entry = $stmt->fetch();
+            if (!$entry) {
+                throw new \RuntimeException('Registro da lista de espera não encontrado.');
+            }
+            if (!in_array($entry['status'], ['waiting', 'notified'], true)) {
+                throw new \RuntimeException('Esta entrada da lista de espera já foi finalizada.');
+            }
+
+            $pdo->prepare('UPDATE waitlist_entries SET status="cancelled" WHERE id=:id')
+                ->execute(['id' => (int) $id]);
+            $pdo->prepare(
+                'UPDATE waitlist_matches SET status="expired" '
+                . 'WHERE waitlist_entry_id=:id AND status IN ("available","queued","notified")'
+            )->execute(['id' => (int) $id]);
+            $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE waitlist_entry_id=:id AND status="pending"'
+            )->execute(['id' => (int) $id]);
+
+            $pdo->commit();
+            flash('success', 'Você saiu da lista de espera.');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível atualizar a lista de espera.');
+        }
+
+        redirect('/painel/minha-lista-espera');
+    }
+
+    public function acceptMine(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+        $matchId = (int) ($_POST['match_id'] ?? 0);
+
+        try {
+            if ($matchId <= 0) {
+                throw new \RuntimeException('A vaga selecionada não está mais disponível.');
+            }
+            $appointmentId = $this->convertMatch($matchId, (int) Auth::id(), null);
+            flash('success', 'Vaga confirmada. Seu agendamento foi criado.');
+            redirect('/painel/agendamentos');
+        } catch (\Throwable $exception) {
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível confirmar a vaga.');
+            redirect('/painel/minha-lista-espera');
+        }
+    }
+
+    public function offer(string $token): void
+    {
+        if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+            $this->offerNotFound();
+            return;
+        }
+
+        if (!Auth::check()) {
+            $_SESSION['after_login'] = '/lista-espera/oferta/' . $token;
+            flash('error', 'Entre na sua conta para confirmar a vaga.');
+            redirect('/login');
+        }
+        Auth::requireRole(['client']);
+
+        $hash = hash('sha256', $token);
+        $stmt = Database::connection()->prepare(
+            'SELECT wm.id,wm.slot_start,wm.status,wm.offer_expires_at,w.status waitlist_status,'
+            . 'e.name establishment_name,s.name service_name,u.name employee_name '
+            . 'FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id '
+            . 'JOIN customers c ON c.id=w.customer_id JOIN establishments e ON e.id=wm.establishment_id '
+            . 'JOIN services s ON s.id=w.service_id JOIN users u ON u.id=wm.employee_user_id '
+            . 'WHERE wm.offer_token_hash=:hash AND c.user_id=:user LIMIT 1'
+        );
+        $stmt->execute(['hash' => $hash, 'user' => Auth::id()]);
+        $offer = $stmt->fetch();
+
+        if (!$offer || !in_array($offer['status'], ['queued', 'notified'], true)
+            || !in_array($offer['waitlist_status'], ['waiting', 'notified'], true)
+            || strtotime((string) $offer['slot_start']) <= time()
+            || (!empty($offer['offer_expires_at']) && strtotime((string) $offer['offer_expires_at']) <= time())) {
+            flash('error', 'Esta oferta expirou ou já não está disponível.');
+            redirect('/painel/minha-lista-espera');
+        }
+
+        View::render('waitlist_offer', [
+            'title' => 'Confirmar vaga',
+            'offer' => $offer,
+            'token' => $token,
+        ]);
+    }
+
+    public function acceptOffer(string $token): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        if (!preg_match('/^[a-f0-9]{64}$/', $token)) {
+            $this->offerNotFound();
+            return;
+        }
+
+        $hash = hash('sha256', $token);
+        $stmt = Database::connection()->prepare(
+            'SELECT wm.id FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id '
+            . 'JOIN customers c ON c.id=w.customer_id WHERE wm.offer_token_hash=:hash AND c.user_id=:user LIMIT 1'
+        );
+        $stmt->execute(['hash' => $hash, 'user' => Auth::id()]);
+        $matchId = (int) ($stmt->fetchColumn() ?: 0);
+
+        try {
+            if ($matchId <= 0) {
+                throw new \RuntimeException('Oferta não encontrada.');
+            }
+            $this->convertMatch($matchId, (int) Auth::id(), $hash);
+            flash('success', 'Vaga confirmada. Seu agendamento foi criado.');
+            redirect('/painel/agendamentos');
+        } catch (\Throwable $exception) {
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível confirmar a vaga.');
+            redirect('/painel/minha-lista-espera');
+        }
+    }
+
     public function index(): void
     {
         Auth::requireRole(['owner', 'employee']);
@@ -146,4 +322,142 @@ final class WaitlistController
         flash($stmt->rowCount() ? 'success' : 'error', $stmt->rowCount() ? 'Lista de espera atualizada.' : 'Registro não encontrado.');
         redirect('/painel/lista-espera');
     }
+    private function convertMatch(int $matchId, int $userId, ?string $expectedTokenHash): int
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT wm.*,w.status waitlist_status,w.service_id,w.customer_id,c.user_id,'
+                . 'e.timezone,e.active establishment_active,s.duration_minutes,s.price,s.active service_active,'
+                . 'e.name establishment_name,s.name service_name,u.name employee_name '
+                . 'FROM waitlist_matches wm JOIN waitlist_entries w ON w.id=wm.waitlist_entry_id '
+                . 'JOIN customers c ON c.id=w.customer_id JOIN establishments e ON e.id=wm.establishment_id '
+                . 'JOIN services s ON s.id=w.service_id JOIN users u ON u.id=wm.employee_user_id '
+                . 'WHERE wm.id=:id LIMIT 1 FOR UPDATE'
+            );
+            $stmt->execute(['id' => $matchId]);
+            $match = $stmt->fetch();
+
+            if (!$match || (int) $match['user_id'] !== $userId) {
+                throw new \RuntimeException('Esta vaga não pertence à sua lista de espera.');
+            }
+            if ($expectedTokenHash !== null && (!is_string($match['offer_token_hash']) || !hash_equals($match['offer_token_hash'], $expectedTokenHash))) {
+                throw new \RuntimeException('O link desta oferta não é mais válido.');
+            }
+            if (!in_array($match['status'], ['available', 'queued', 'notified'], true)
+                || !in_array($match['waitlist_status'], ['waiting', 'notified'], true)) {
+                throw new \RuntimeException('Esta oferta já foi finalizada.');
+            }
+            if ((int) $match['establishment_active'] !== 1 || (int) $match['service_active'] !== 1) {
+                throw new \RuntimeException('O estabelecimento ou serviço não está disponível.');
+            }
+
+            $timezone = new DateTimeZone((string) $match['timezone']);
+            $slotStart = new DateTimeImmutable((string) $match['slot_start'], $timezone);
+            $now = new DateTimeImmutable('now', $timezone);
+            if ($slotStart <= $now || (!empty($match['offer_expires_at']) && new DateTimeImmutable((string) $match['offer_expires_at'], $timezone) <= $now)) {
+                $this->expireMatchInsideTransaction($pdo, $match);
+                $pdo->commit();
+                throw new \RuntimeException('Esta oferta expirou. Você voltou para a lista de espera.');
+            }
+
+            $providerLock = $pdo->prepare('SELECT id FROM users WHERE id=:provider AND status="active" FOR UPDATE');
+            $providerLock->execute(['provider' => $match['employee_user_id']]);
+            if (!$providerLock->fetchColumn()) {
+                $this->expireMatchInsideTransaction($pdo, $match);
+                $pdo->commit();
+                throw new \RuntimeException('O profissional não está mais disponível. Você voltou para a lista de espera.');
+            }
+
+            $date = $slotStart->format('Y-m-d');
+            $time = $slotStart->format('H:i');
+            $slots = (new AvailabilityService())->slots(
+                (int) $match['establishment_id'],
+                (int) $match['service_id'],
+                (int) $match['employee_user_id'],
+                $date
+            );
+            if (!in_array($time, $slots, true)) {
+                $this->expireMatchInsideTransaction($pdo, $match);
+                $pdo->commit();
+                throw new \RuntimeException('Essa vaga acabou de ser ocupada. Você voltou para a lista de espera.');
+            }
+
+            $endsAt = $slotStart->add(new DateInterval('PT' . (int) $match['duration_minutes'] . 'M'));
+            $insert = $pdo->prepare(
+                'INSERT INTO appointments '
+                . '(establishment_id,service_id,employee_user_id,client_user_id,customer_id,created_by_user_id,starts_at,ends_at,status,price,notes) '
+                . 'VALUES (:establishment,:service,:employee,:client,:customer,:creator,:starts,:ends,"confirmed",:price,:notes)'
+            );
+            $insert->execute([
+                'establishment' => $match['establishment_id'],
+                'service' => $match['service_id'],
+                'employee' => $match['employee_user_id'],
+                'client' => $userId,
+                'customer' => $match['customer_id'],
+                'creator' => $userId,
+                'starts' => $slotStart->format('Y-m-d H:i:s'),
+                'ends' => $endsAt->format('Y-m-d H:i:s'),
+                'price' => $match['price'],
+                'notes' => 'Criado a partir da lista de espera.',
+            ]);
+            $appointmentId = (int) $pdo->lastInsertId();
+
+            $pdo->prepare(
+                'INSERT INTO appointment_events (appointment_id,establishment_id,user_id,event_type,to_status,details) '
+                . 'VALUES (:appointment,:establishment,:user,"created","confirmed",:details)'
+            )->execute([
+                'appointment' => $appointmentId,
+                'establishment' => $match['establishment_id'],
+                'user' => $userId,
+                'details' => 'Agendamento confirmado pelo cliente a partir da lista de espera.',
+            ]);
+
+            $pdo->prepare(
+                'UPDATE waitlist_matches SET status="converted",accepted_at=NOW(),appointment_id=:appointment '
+                . 'WHERE id=:id'
+            )->execute(['appointment' => $appointmentId, 'id' => $matchId]);
+            $pdo->prepare('UPDATE waitlist_entries SET status="converted" WHERE id=:id')
+                ->execute(['id' => $match['waitlist_entry_id']]);
+            $pdo->prepare(
+                'UPDATE waitlist_matches SET status="expired" WHERE waitlist_entry_id=:entry AND id<>:match '
+                . 'AND status IN ("available","queued","notified")'
+            )->execute(['entry' => $match['waitlist_entry_id'], 'match' => $matchId]);
+            $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE waitlist_entry_id=:entry AND status="pending"'
+            )->execute(['entry' => $match['waitlist_entry_id']]);
+
+            $pdo->commit();
+            return $appointmentId;
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    private function expireMatchInsideTransaction(\PDO $pdo, array $match): void
+    {
+        $pdo->prepare('UPDATE waitlist_matches SET status="expired" WHERE id=:id')
+            ->execute(['id' => $match['id']]);
+        if (($match['waitlist_status'] ?? null) === 'notified') {
+            $pdo->prepare('UPDATE waitlist_entries SET status="waiting" WHERE id=:id')
+                ->execute(['id' => $match['waitlist_entry_id']]);
+        }
+        $pdo->prepare(
+            'UPDATE notification_outbox SET status="cancelled" '
+            . 'WHERE waitlist_entry_id=:entry AND event_type="waitlist_slot_available" AND status="pending"'
+        )->execute(['entry' => $match['waitlist_entry_id']]);
+    }
+
+    private function offerNotFound(): void
+    {
+        http_response_code(404);
+        View::render('errors/404', ['title' => 'Oferta não encontrada']);
+    }
+
 }

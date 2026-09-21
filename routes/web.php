@@ -28,6 +28,8 @@ $router->get('/estabelecimentos/{slug}', [HomeController::class, 'establishment'
 $router->get('/estabelecimentos/{slug}/horarios', [BookingController::class, 'availability']);
 $router->post('/estabelecimentos/{slug}/agendar', [BookingController::class, 'store']);
 $router->post('/estabelecimentos/{slug}/lista-espera', [WaitlistController::class, 'store']);
+$router->get('/lista-espera/oferta/{token}', [WaitlistController::class, 'offer']);
+$router->post('/lista-espera/oferta/{token}', [WaitlistController::class, 'acceptOffer']);
 
 $router->get('/login', [AuthController::class, 'login']);
 $router->post('/login', [AuthController::class, 'authenticate']);
@@ -50,6 +52,9 @@ $router->post('/painel/perfil/foto', [ProfileController::class, 'uploadAvatar'])
 $router->post('/painel/perfil/foto/remover', [ProfileController::class, 'deleteAvatar']);
 $router->get('/painel/agenda', [AgendaController::class, 'index']);
 $router->get('/painel/indicadores', [ManagementController::class, 'index']);
+$router->get('/painel/minha-lista-espera', [WaitlistController::class, 'mine']);
+$router->post('/painel/minha-lista-espera/{id}/cancelar', [WaitlistController::class, 'cancelMine']);
+$router->post('/painel/minha-lista-espera/{id}/aceitar', [WaitlistController::class, 'acceptMine']);
 $router->get('/painel/lista-espera', [WaitlistController::class, 'index']);
 $router->post('/painel/lista-espera/verificar', [WaitlistController::class, 'scan']);
 $router->post('/painel/lista-espera/{id}/status', [WaitlistController::class, 'status']);
