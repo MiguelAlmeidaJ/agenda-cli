@@ -9,6 +9,7 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\AppointmentRecurrenceService;
 use App\Services\AvailabilityService;
 use App\Services\EstablishmentClock;
 use DateInterval;
@@ -145,6 +146,9 @@ final class AppointmentController
         $date = trim((string) ($_POST['date'] ?? ''));
         $time = trim((string) ($_POST['time'] ?? ''));
         $notes = trim((string) ($_POST['notes'] ?? ''));
+        $recurring = isset($_POST['recurring']);
+        $intervalWeeks = (int) ($_POST['interval_weeks'] ?? 1);
+        $occurrences = (int) ($_POST['occurrences'] ?? 4);
 
         if (Auth::role() === 'employee') {
             $employeeId = (int) Auth::id();
@@ -201,47 +205,100 @@ final class AppointmentController
                 throw new \RuntimeException('O profissional selecionado não realiza este serviço.');
             }
 
-            $slots = (new AvailabilityService())->slots($establishmentId, $serviceId, $employeeId, $date);
-            if (!in_array($time, $slots, true)) {
-                throw new \RuntimeException('Esse horário não está mais disponível.');
+            $timezoneName = (string) $service['timezone'];
+            $dates = $recurring
+                ? (new AppointmentRecurrenceService())->dates($date, $intervalWeeks, $occurrences, $timezoneName)
+                : [$date];
+
+            $availability = new AvailabilityService();
+            foreach ($dates as $occurrenceDate) {
+                $slots = $availability->slots($establishmentId, $serviceId, $employeeId, $occurrenceDate);
+                if (!in_array($time, $slots, true)) {
+                    $formatted = (new DateTimeImmutable($occurrenceDate))->format('d/m/Y');
+                    throw new \RuntimeException(
+                        $recurring
+                            ? 'A série não foi criada porque ' . $formatted . ' às ' . $time . ' não está disponível.'
+                            : 'Esse horário não está mais disponível.'
+                    );
+                }
             }
 
-            $timezone = new DateTimeZone((string) $service['timezone']);
-            $startsAt = new DateTimeImmutable($date . ' ' . $time . ':00', $timezone);
-            $endsAt = $startsAt->add(new DateInterval('PT' . (int) $service['duration_minutes'] . 'M'));
+            $seriesId = null;
+            if ($recurring) {
+                $series = $pdo->prepare(
+                    'INSERT INTO appointment_series '
+                    . '(establishment_id,customer_id,service_id,employee_user_id,created_by_user_id,frequency,interval_weeks,occurrences_count,starts_on,starts_at) '
+                    . 'VALUES (:establishment,:customer,:service,:employee,:creator,"weekly",:interval,:occurrences,:starts_on,:starts_at)'
+                );
+                $series->execute([
+                    'establishment' => $establishmentId,
+                    'customer' => $customerId,
+                    'service' => $serviceId,
+                    'employee' => $employeeId,
+                    'creator' => Auth::id(),
+                    'interval' => $intervalWeeks,
+                    'occurrences' => $occurrences,
+                    'starts_on' => $date,
+                    'starts_at' => $time . ':00',
+                ]);
+                $seriesId = (int) $pdo->lastInsertId();
+            }
 
+            $timezone = new DateTimeZone($timezoneName);
             $insert = $pdo->prepare(
                 'INSERT INTO appointments '
-                . '(establishment_id, service_id, employee_user_id, client_user_id, customer_id, created_by_user_id, starts_at, ends_at, status, price, notes) '
-                . 'VALUES (:establishment, :service, :employee, :client, :customer, :creator, :starts, :ends, "confirmed", :price, :notes)'
+                . '(establishment_id,service_id,employee_user_id,client_user_id,customer_id,series_id,series_position,created_by_user_id,starts_at,ends_at,status,price,notes) '
+                . 'VALUES (:establishment,:service,:employee,:client,:customer,:series,:position,:creator,:starts,:ends,"confirmed",:price,:notes)'
             );
-            $insert->execute([
-                'establishment' => $establishmentId,
-                'service' => $serviceId,
-                'employee' => $employeeId,
-                'client' => $customer['user_id'] ?: null,
-                'customer' => $customerId,
-                'creator' => Auth::id(),
-                'starts' => $startsAt->format('Y-m-d H:i:s'),
-                'ends' => $endsAt->format('Y-m-d H:i:s'),
-                'price' => $service['price'],
-                'notes' => $notes !== '' ? $notes : null,
-            ]);
-            $appointmentId = (int) $pdo->lastInsertId();
 
-            $this->recordEvent(
-                $pdo,
-                $appointmentId,
-                $establishmentId,
-                'created',
-                null,
-                'confirmed',
-                'Agendamento criado manualmente para ' . $customer['name'] . '.'
-            );
+            $firstAppointmentId = 0;
+            foreach ($dates as $index => $occurrenceDate) {
+                $startsAt = new DateTimeImmutable($occurrenceDate . ' ' . $time . ':00', $timezone);
+                $endsAt = $startsAt->add(new DateInterval('PT' . (int) $service['duration_minutes'] . 'M'));
+
+                $insert->execute([
+                    'establishment' => $establishmentId,
+                    'service' => $serviceId,
+                    'employee' => $employeeId,
+                    'client' => $customer['user_id'] ?: null,
+                    'customer' => $customerId,
+                    'series' => $seriesId,
+                    'position' => $seriesId !== null ? $index + 1 : null,
+                    'creator' => Auth::id(),
+                    'starts' => $startsAt->format('Y-m-d H:i:s'),
+                    'ends' => $endsAt->format('Y-m-d H:i:s'),
+                    'price' => $service['price'],
+                    'notes' => $notes !== '' ? $notes : null,
+                ]);
+
+                $appointmentId = (int) $pdo->lastInsertId();
+                if ($firstAppointmentId === 0) {
+                    $firstAppointmentId = $appointmentId;
+                }
+
+                $details = $seriesId !== null
+                    ? 'Agendamento recorrente ' . ($index + 1) . '/' . count($dates) . ' criado manualmente para ' . $customer['name'] . '.'
+                    : 'Agendamento criado manualmente para ' . $customer['name'] . '.';
+
+                $this->recordEvent(
+                    $pdo,
+                    $appointmentId,
+                    $establishmentId,
+                    'created',
+                    null,
+                    'confirmed',
+                    $details
+                );
+            }
 
             $pdo->commit();
-            flash('success', 'Agendamento criado com sucesso.');
-            redirect('/painel/agendamentos/' . $appointmentId . '/editar');
+            flash(
+                'success',
+                $seriesId !== null
+                    ? count($dates) . ' agendamentos recorrentes criados com sucesso.'
+                    : 'Agendamento criado com sucesso.'
+            );
+            redirect('/painel/agendamentos/' . $firstAppointmentId . '/editar');
         } catch (\Throwable $exception) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -311,6 +368,85 @@ final class AppointmentController
                 $pdo->rollBack();
             }
             flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível atualizar o agendamento.');
+        }
+
+        redirect('/painel/agendamentos');
+    }
+
+    public function cancelSeriesFrom(string $id): void
+    {
+        Auth::requireRole(['owner', 'employee']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $appointmentId = (int) $id;
+        $establishmentId = TenantContext::requireEstablishmentId();
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $appointment = $this->findForActor($pdo, $establishmentId, $appointmentId, true);
+            if (!$appointment || empty($appointment['series_id'])) {
+                throw new \RuntimeException('Este agendamento não pertence a uma série.');
+            }
+
+            $sql = 'SELECT id,status FROM appointments '
+                . 'WHERE establishment_id=:establishment AND series_id=:series '
+                . 'AND starts_at>=:starts AND status IN ("pending","confirmed")';
+            $params = [
+                'establishment' => $establishmentId,
+                'series' => $appointment['series_id'],
+                'starts' => $appointment['starts_at'],
+            ];
+            if (Auth::role() === 'employee') {
+                $sql .= ' AND employee_user_id=:employee';
+                $params['employee'] = Auth::id();
+            }
+            $sql .= ' ORDER BY starts_at FOR UPDATE';
+
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $future = $stmt->fetchAll();
+            if ($future === []) {
+                throw new \RuntimeException('Não há ocorrências futuras ativas nesta série.');
+            }
+
+            $clock = new EstablishmentClock();
+            $invalidatedAt = $clock->sql($clock->now($pdo, $establishmentId));
+            $update = $pdo->prepare(
+                'UPDATE appointments SET status="cancelled" WHERE id=:id AND establishment_id=:establishment'
+            );
+            $cancelTokens = $pdo->prepare(
+                'UPDATE appointment_attendance_tokens SET used_at=:used WHERE appointment_id=:appointment AND used_at IS NULL'
+            );
+            $cancelNotifications = $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE appointment_id=:appointment AND status="pending" '
+                . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
+            );
+
+            foreach ($future as $item) {
+                $itemId = (int) $item['id'];
+                $update->execute(['id' => $itemId, 'establishment' => $establishmentId]);
+                $cancelTokens->execute(['used' => $invalidatedAt, 'appointment' => $itemId]);
+                $cancelNotifications->execute(['appointment' => $itemId]);
+                $this->recordEvent(
+                    $pdo,
+                    $itemId,
+                    $establishmentId,
+                    'status_changed',
+                    (string) $item['status'],
+                    'cancelled',
+                    'Cancelado junto com as próximas ocorrências da série.'
+                );
+            }
+
+            $pdo->commit();
+            flash('success', count($future) . ' ocorrência(s) futura(s) da série cancelada(s).');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível cancelar a série.');
         }
 
         redirect('/painel/agendamentos');
