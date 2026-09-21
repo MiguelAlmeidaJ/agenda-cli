@@ -171,14 +171,26 @@ final class NotificationService
         $pdo = Database::connection();
         $clock = new EstablishmentClock();
         $scheduledAt = $clock->sql($clock->now($pdo, $establishmentId));
-        $sql = 'SELECT a.id,a.customer_id,a.starts_at,e.name establishment_name,s.name service_name,p.name employee_name,COALESCE(c.name,u.name,"Cliente") customer_name,COALESCE(c.phone,u.phone) phone FROM appointments a JOIN establishments e ON e.id=a.establishment_id JOIN services s ON s.id=a.service_id JOIN users p ON p.id=a.employee_user_id LEFT JOIN customers c ON c.id=a.customer_id LEFT JOIN users u ON u.id=a.client_user_id WHERE a.establishment_id=:id AND ' . $condition;
+        $sql = 'SELECT a.id,a.customer_id,a.starts_at,a.attendance_response,e.name establishment_name,s.name service_name,p.name employee_name,COALESCE(c.name,u.name,"Cliente") customer_name,COALESCE(c.phone,u.phone) phone FROM appointments a JOIN establishments e ON e.id=a.establishment_id JOIN services s ON s.id=a.service_id JOIN users p ON p.id=a.employee_user_id LEFT JOIN customers c ON c.id=a.customer_id LEFT JOIN users u ON u.id=a.client_user_id WHERE a.establishment_id=:id AND ' . $condition;
         $stmt = $pdo->prepare($sql);
         $stmt->execute(array_merge(['id' => $establishmentId], $conditionParams));
         $count = 0;
         foreach ($stmt->fetchAll() as $row) {
             $phone = $this->digits((string) ($row['phone'] ?? ''));
             if ($phone === '') continue;
-            $message = $this->message($event, $row);
+            $attendanceTokenId = null;
+            $attendanceUrl = null;
+            if (in_array($event, ['appointment_confirmation', 'reminder_24h', 'reminder_2h'], true)
+                && ($row['attendance_response'] ?? 'pending') === 'pending') {
+                [$attendanceUrl, $attendanceTokenId] = $this->createAttendanceToken(
+                    $pdo,
+                    $establishmentId,
+                    (int) $row['id'],
+                    (string) $row['starts_at']
+                );
+            }
+
+            $message = $this->message($event, $row, $attendanceUrl);
             $slotKey = date('YmdHi', strtotime((string) $row['starts_at']));
             $dedupe = $event . ':' . $row['id'] . ($event === 'appointment_cancelled' ? '' : ':' . $slotKey);
 
@@ -190,22 +202,64 @@ final class NotificationService
                 $cancel->execute(['appointment'=>$row['id'],'event'=>$event,'dedupe'=>$dedupe]);
             }
 
-            if ($this->queue($establishmentId, $row['customer_id'] ? (int) $row['customer_id'] : null, (int) $row['id'], null, $event, $phone, $message, $dedupe, $scheduledAt)) $count++;
+            $queued = $this->queue(
+                $establishmentId,
+                $row['customer_id'] ? (int) $row['customer_id'] : null,
+                (int) $row['id'],
+                null,
+                $event,
+                $phone,
+                $message,
+                $dedupe,
+                $scheduledAt
+            );
+            if ($queued) {
+                $count++;
+            } elseif ($attendanceTokenId !== null) {
+                $pdo->prepare('DELETE FROM appointment_attendance_tokens WHERE id=:id')->execute(['id' => $attendanceTokenId]);
+            }
         }
         return $count;
     }
 
-    private function message(string $event, array $row): string
+    private function message(string $event, array $row, ?string $attendanceUrl = null): string
     {
         $date = date('d/m/Y', strtotime((string) $row['starts_at']));
         $time = date('H:i', strtotime((string) $row['starts_at']));
+        $presence = $attendanceUrl !== null
+            ? ' Confirme sua presença: ' . $attendanceUrl
+            : (($row['attendance_response'] ?? null) === 'confirmed' ? ' Sua presença já está confirmada.' : '');
+
         return match ($event) {
-            'appointment_confirmation' => "Oi {$row['customer_name']}! Seu agendamento de {$row['service_name']} está confirmado para {$date} às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}.",
+            'appointment_confirmation' => "Oi {$row['customer_name']}! Seu agendamento de {$row['service_name']} está confirmado para {$date} às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}." . $presence,
             'appointment_cancelled' => "Oi {$row['customer_name']}. Seu agendamento de {$row['service_name']} de {$date} às {$time} no {$row['establishment_name']} foi cancelado.",
-            'reminder_24h' => "Oi {$row['customer_name']}! Lembrete: amanhã você tem {$row['service_name']} às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}.",
-            'reminder_2h' => "Oi {$row['customer_name']}! Seu horário de {$row['service_name']} é hoje às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}.",
+            'reminder_24h' => "Oi {$row['customer_name']}! Lembrete: amanhã você tem {$row['service_name']} às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}." . $presence,
+            'reminder_2h' => "Oi {$row['customer_name']}! Seu horário de {$row['service_name']} é hoje às {$time}, com {$row['employee_name']}, no {$row['establishment_name']}." . $presence,
             default => '',
         };
+    }
+
+    private function createAttendanceToken(\PDO $pdo, int $establishmentId, int $appointmentId, string $startsAt): array
+    {
+        $token = bin2hex(random_bytes(32));
+        $hash = hash('sha256', $token);
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO appointment_attendance_tokens '
+            . '(establishment_id,appointment_id,token_hash,expires_at) '
+            . 'VALUES (:establishment,:appointment,:hash,:expires)'
+        );
+        $stmt->execute([
+            'establishment' => $establishmentId,
+            'appointment' => $appointmentId,
+            'hash' => $hash,
+            'expires' => $startsAt,
+        ]);
+
+        return [
+            url('/agendamentos/presenca/' . $token),
+            (int) $pdo->lastInsertId(),
+        ];
     }
 
     private function queue(int $establishmentId, ?int $customerId, ?int $appointmentId, ?int $waitlistId, string $event, string $recipient, string $message, string $dedupe, ?string $scheduledAt = null): bool
