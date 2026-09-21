@@ -41,9 +41,8 @@ final class PublicEstablishmentSearchService
                 . "e.name LIKE :q_name ESCAPE '!' "
                 . "OR e.description LIKE :q_description ESCAPE '!' "
                 . 'OR EXISTS (SELECT 1 FROM services sq WHERE sq.establishment_id=e.id AND sq.active=1 '
-                . "(sq.name LIKE :q_service_name ESCAPE '!' OR sq.description LIKE :q_service_description ESCAPE '!'))"
+                . "AND (sq.name LIKE :q_service_name ESCAPE '!' OR sq.description LIKE :q_service_description ESCAPE '!'))"
                 . ')';
-            $where[count($where) - 1] = str_replace('1 (sq.name', '1 AND (sq.name', $where[count($where) - 1]);
 
             $params['q_name'] = $term;
             $params['q_description'] = $term;
