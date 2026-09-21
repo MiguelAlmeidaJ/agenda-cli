@@ -3,7 +3,7 @@
 use App\Core\Csrf;
 
 $days = [1 => 'Segunda-feira', 2 => 'Terça-feira', 3 => 'Quarta-feira', 4 => 'Quinta-feira', 5 => 'Sexta-feira', 6 => 'Sábado', 7 => 'Domingo'];
-$today = (new DateTimeImmutable('today'))->format('Y-m-d');
+$today = (string) $today;
 ?>
 <section class="page-header">
   <a class="small text-decoration-none text-muted-app" href="<?= e(url('/painel/equipe')) ?>"><i class="bi bi-arrow-left me-1"></i>Voltar para equipe</a>
