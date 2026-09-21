@@ -10,6 +10,7 @@ use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
 use App\Services\BrazilHolidayService;
+use App\Services\ScheduleRangeService;
 use DateTimeImmutable;
 
 final class ScheduleController
@@ -27,6 +28,32 @@ final class ScheduleController
         $hours = [];
         foreach ($hoursStmt->fetchAll() as $row) {
             $hours[(int) $row['weekday']] = $row;
+        }
+
+        $hourRanges = [];
+        try {
+            $rangeStmt = $pdo->prepare(
+                'SELECT weekday,opens_at,closes_at FROM business_hour_ranges '
+                . 'WHERE establishment_id=:establishment ORDER BY weekday,sort_order,id'
+            );
+            $rangeStmt->execute(['establishment' => $establishmentId]);
+            foreach ($rangeStmt->fetchAll() as $range) {
+                $weekday = (int) $range['weekday'];
+                $hourRanges[$weekday][] = [
+                    'opens_at' => substr((string) $range['opens_at'], 0, 5),
+                    'closes_at' => substr((string) $range['closes_at'], 0, 5),
+                ];
+            }
+        } catch (\PDOException) {
+            // Compatibilidade enquanto a migration ainda não foi aplicada.
+        }
+        foreach ($hours as $weekday => $row) {
+            if (!isset($hourRanges[$weekday]) && (int) $row['is_closed'] !== 1 && $row['opens_at'] && $row['closes_at']) {
+                $hourRanges[$weekday] = [[
+                    'opens_at' => substr((string) $row['opens_at'], 0, 5),
+                    'closes_at' => substr((string) $row['closes_at'], 0, 5),
+                ]];
+            }
         }
 
         $exceptionsStmt = $pdo->prepare(
@@ -65,6 +92,7 @@ final class ScheduleController
         View::render('panel/hours', [
             'title' => 'Horários e datas especiais',
             'hours' => $hours,
+            'hourRanges' => $hourRanges,
             'nationalHolidays' => $nationalHolidays,
             'specialDates' => $specialDates,
             'today' => $today,
@@ -78,32 +106,64 @@ final class ScheduleController
         Csrf::validate($_POST['_csrf'] ?? null);
         $establishmentId = TenantContext::requireEstablishmentId();
         $pdo = Database::connection();
+        $rangeService = new ScheduleRangeService();
+
         $upsert = $pdo->prepare(
             'INSERT INTO business_hours (establishment_id, weekday, opens_at, closes_at, is_closed) '
             . 'VALUES (:establishment, :weekday, :opens, :closes, :closed) '
             . 'ON DUPLICATE KEY UPDATE opens_at = VALUES(opens_at), closes_at = VALUES(closes_at), is_closed = VALUES(is_closed)'
         );
+        $deleteRanges = $pdo->prepare(
+            'DELETE FROM business_hour_ranges WHERE establishment_id=:establishment AND weekday=:weekday'
+        );
+        $insertRange = $pdo->prepare(
+            'INSERT INTO business_hour_ranges (establishment_id,weekday,opens_at,closes_at,sort_order) '
+            . 'VALUES (:establishment,:weekday,:opens,:closes,:sort_order)'
+        );
 
-        for ($weekday = 1; $weekday <= 7; $weekday++) {
-            $closed = isset($_POST['closed'][$weekday]);
-            $opens = trim((string) ($_POST['opens'][$weekday] ?? ''));
-            $closes = trim((string) ($_POST['closes'][$weekday] ?? ''));
+        $pdo->beginTransaction();
+        try {
+            for ($weekday = 1; $weekday <= 7; $weekday++) {
+                $closed = isset($_POST['closed'][$weekday]);
+                $ranges = $closed ? [] : $rangeService->normalize((array) ($_POST['ranges'][$weekday] ?? []));
 
-            if (!$closed && !$this->validTimeRange($opens, $closes)) {
-                flash('error', 'Confira os horários de abertura e fechamento.');
-                redirect('/painel/horarios');
+                if (!$closed && $ranges === []) {
+                    throw new \RuntimeException('Adicione ao menos uma faixa de horário nos dias abertos.');
+                }
+
+                $deleteRanges->execute([
+                    'establishment' => $establishmentId,
+                    'weekday' => $weekday,
+                ]);
+
+                $upsert->execute([
+                    'establishment' => $establishmentId,
+                    'weekday' => $weekday,
+                    'opens' => $closed ? null : $ranges[0]['opens_at'],
+                    'closes' => $closed ? null : $ranges[count($ranges) - 1]['closes_at'],
+                    'closed' => $closed ? 1 : 0,
+                ]);
+
+                foreach ($ranges as $index => $range) {
+                    $insertRange->execute([
+                        'establishment' => $establishmentId,
+                        'weekday' => $weekday,
+                        'opens' => $range['opens_at'],
+                        'closes' => $range['closes_at'],
+                        'sort_order' => $index,
+                    ]);
+                }
             }
 
-            $upsert->execute([
-                'establishment' => $establishmentId,
-                'weekday' => $weekday,
-                'opens' => $closed ? null : $opens,
-                'closes' => $closed ? null : $closes,
-                'closed' => $closed ? 1 : 0,
-            ]);
+            $pdo->commit();
+            flash('success', 'Horário semanal atualizado.');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException ? $exception->getMessage() : 'Não foi possível atualizar os horários.');
         }
 
-        flash('success', 'Horário semanal atualizado.');
         redirect('/painel/horarios');
     }
 
