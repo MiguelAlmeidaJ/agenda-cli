@@ -79,10 +79,6 @@ final class AttendanceConfirmationController
             ]);
 
             $pdo->prepare(
-                'UPDATE appointment_attendance_tokens SET used_at=:used WHERE id=:token'
-            )->execute(['used' => $nowSql, 'token' => $record['token_id']]);
-
-            $pdo->prepare(
                 'INSERT INTO appointment_events '
                 . '(appointment_id,establishment_id,user_id,event_type,details) '
                 . 'VALUES (:appointment,:establishment,NULL,"attendance_confirmed",:details)'
@@ -149,12 +145,12 @@ final class AttendanceConfirmationController
             return 'expired';
         }
 
-        if (($record['attendance_response'] ?? null) === 'confirmed') {
-            return 'confirmed';
-        }
-
         if (!empty($record['used_at'])) {
             return 'expired';
+        }
+
+        if (($record['attendance_response'] ?? null) === 'confirmed') {
+            return 'confirmed';
         }
 
         return 'available';
