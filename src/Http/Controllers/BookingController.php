@@ -328,6 +328,67 @@ final class BookingController
         redirect('/painel/agendamentos');
     }
 
+    public function confirmAttendance(string $id): void
+    {
+        Auth::requireRole(['client']);
+        Csrf::validate($_POST['_csrf'] ?? null);
+
+        $appointmentId = (int) $id;
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+
+        try {
+            $appointment = $this->clientAppointment($pdo, $appointmentId, true);
+            if (!$appointment) {
+                throw new \RuntimeException('Agendamento não encontrado.');
+            }
+            if (!in_array($appointment['status'], ['pending', 'confirmed'], true)) {
+                throw new \RuntimeException('Este agendamento não está mais disponível para confirmação de presença.');
+            }
+
+            $clock = new EstablishmentClock();
+            $now = $clock->inTimezone((string) $appointment['timezone']);
+            $startsAt = $clock->inTimezone((string) $appointment['timezone'], (string) $appointment['starts_at']);
+            if ($startsAt <= $now) {
+                throw new \RuntimeException('O atendimento já começou ou está no passado.');
+            }
+
+            if (($appointment['attendance_response'] ?? 'pending') !== 'confirmed') {
+                $pdo->prepare(
+                    'UPDATE appointments SET attendance_response="confirmed",attendance_responded_at=:responded '
+                    . 'WHERE id=:appointment AND client_user_id=:client'
+                )->execute([
+                    'responded' => $clock->sql($now),
+                    'appointment' => $appointmentId,
+                    'client' => Auth::id(),
+                ]);
+
+                $pdo->prepare(
+                    'INSERT INTO appointment_events '
+                    . '(appointment_id,establishment_id,user_id,event_type,details) '
+                    . 'VALUES (:appointment,:establishment,:user,"attendance_confirmed",:details)'
+                )->execute([
+                    'appointment' => $appointmentId,
+                    'establishment' => $appointment['establishment_id'],
+                    'user' => Auth::id(),
+                    'details' => 'Presença confirmada pelo cliente na área autenticada.',
+                ]);
+            }
+
+            $pdo->commit();
+            flash('success', 'Sua presença foi confirmada.');
+        } catch (\Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $exception instanceof \RuntimeException
+                ? $exception->getMessage()
+                : 'Não foi possível confirmar sua presença.');
+        }
+
+        redirect('/painel/agendamentos');
+    }
+
     public function cancel(string $id): void
     {
         Auth::requireRole(['client']);
