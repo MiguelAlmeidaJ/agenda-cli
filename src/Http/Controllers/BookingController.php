@@ -367,6 +367,12 @@ final class BookingController
                 'UPDATE appointment_attendance_tokens SET used_at=:used '
                 . 'WHERE appointment_id=:appointment AND used_at IS NULL'
             )->execute(['used'=>$invalidatedAt,'appointment'=>$appointmentId]);
+            $pdo->prepare(
+                'UPDATE notification_outbox SET status="cancelled" '
+                . 'WHERE appointment_id=:appointment AND status="pending" '
+                . 'AND event_type IN ("appointment_confirmation","reminder_24h","reminder_2h")'
+            )->execute(['appointment'=>$appointmentId]);
+
             $event = $pdo->prepare(
                 'INSERT INTO appointment_events (appointment_id, establishment_id, user_id, event_type, from_status, to_status, details) '
                 . 'VALUES (:appointment, :establishment, :user, "status_changed", :from_status, "cancelled", :details)'
