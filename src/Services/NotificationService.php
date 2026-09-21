@@ -10,7 +10,11 @@ final class NotificationService
 {
     public function settings(int $establishmentId): array
     {
-        $stmt = Database::connection()->prepare('SELECT * FROM notification_settings WHERE establishment_id = :id LIMIT 1');
+        $stmt = Database::connection()->prepare(
+            'SELECT ns.*,COALESCE(bs.waitlist_offer_minutes,30) waitlist_offer_minutes '
+            . 'FROM notification_settings ns LEFT JOIN booking_settings bs ON bs.establishment_id=ns.establishment_id '
+            . 'WHERE ns.establishment_id=:id LIMIT 1'
+        );
         $stmt->execute(['id' => $establishmentId]);
         return $stmt->fetch() ?: [
             'establishment_id' => $establishmentId,
@@ -93,7 +97,8 @@ final class NotificationService
                 date('H:i', strtotime($expiresAt)),
                 $acceptUrl
             );
-            $dedupe = 'waitlist:' . $row['waitlist_id'] . ':' . $row['employee_user_id'] . ':' . date('YmdHi', strtotime((string) $row['slot_start']));
+            $dedupe = 'waitlist:' . $row['waitlist_id'] . ':' . $row['employee_user_id'] . ':'
+                . date('YmdHi', strtotime((string) $row['slot_start'])) . ':' . substr($tokenHash, 0, 12);
 
             $queued = $this->queue(
                 (int) $row['establishment_id'],
