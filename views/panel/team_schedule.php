@@ -93,6 +93,124 @@ $today = (string) $today;
         </form>
       </div>
     </div>
+    <div class="card mt-4">
+      <div class="card-header bg-white p-4 border-bottom">
+        <h2 class="h5 mb-1">Férias e ausências recorrentes</h2>
+        <p class="small text-muted-app mb-0">Bloqueie vários dias de uma vez ou crie uma indisponibilidade que se repete toda semana.</p>
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-4">
+          <div class="col-xl-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="fw-semibold mb-1">Férias / período integral</div>
+              <p class="small text-muted-app">O profissional ficará indisponível durante todo o dia entre as datas informadas.</p>
+              <form method="post" action="<?= e(url('/painel/equipe/' . $provider['id'] . '/ausencias')) ?>">
+                <?= Csrf::field() ?>
+                <input type="hidden" name="absence_type" value="date_range">
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-6">
+                    <label class="form-label">De</label>
+                    <input class="form-control" type="date" name="starts_on" min="<?= e($today) ?>" required>
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label">Até</label>
+                    <input class="form-control" type="date" name="ends_on" min="<?= e($today) ?>" required>
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Motivo <span class="text-muted-app fw-normal">(opcional)</span></label>
+                  <input class="form-control" name="reason" maxlength="190" placeholder="Ex.: férias, congresso">
+                </div>
+                <button class="btn btn-outline-dark w-100" type="submit"><i class="bi bi-calendar2-x me-2"></i>Adicionar período</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="col-xl-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="fw-semibold mb-1">Ausência semanal</div>
+              <p class="small text-muted-app">Ex.: toda terça-feira, das 12:00 às 14:00.</p>
+              <form method="post" action="<?= e(url('/painel/equipe/' . $provider['id'] . '/ausencias')) ?>">
+                <?= Csrf::field() ?>
+                <input type="hidden" name="absence_type" value="weekly">
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-6">
+                    <label class="form-label">Dia</label>
+                    <select class="form-select" name="weekday" required>
+                      <?php foreach ($days as $weekday => $label): ?>
+                        <option value="<?= $weekday ?>"><?= e($label) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label">A partir de</label>
+                    <input class="form-control" type="date" name="starts_on" min="<?= e($today) ?>" value="<?= e($today) ?>" required>
+                  </div>
+                </div>
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-6">
+                    <label class="form-label">De</label>
+                    <input class="form-control" type="time" name="starts_at" required>
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label">Até</label>
+                    <input class="form-control" type="time" name="ends_at" required>
+                  </div>
+                </div>
+                <div class="row g-2 mb-3">
+                  <div class="col-sm-6">
+                    <label class="form-label">Vigência até <span class="text-muted-app fw-normal">(opcional)</span></label>
+                    <input class="form-control" type="date" name="ends_on" min="<?= e($today) ?>">
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label">Motivo <span class="text-muted-app fw-normal">(opcional)</span></label>
+                    <input class="form-control" name="reason" maxlength="190" placeholder="Ex.: almoço fixo">
+                  </div>
+                </div>
+                <button class="btn btn-outline-dark w-100" type="submit"><i class="bi bi-arrow-repeat me-2"></i>Adicionar recorrência</button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-top mt-4 pt-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="h6 mb-0">Ausências ativas e futuras</h3>
+            <span class="small text-muted-app"><?= count($absences) ?> regra(s)</span>
+          </div>
+          <div class="d-grid gap-2">
+            <?php foreach ($absences as $absence): ?>
+              <div class="border rounded-3 p-3 d-flex justify-content-between align-items-start gap-3">
+                <div>
+                  <?php if ($absence['kind'] === 'date_range'): ?>
+                    <div class="fw-semibold small">Férias / ausência integral</div>
+                    <div class="small text-muted-app">
+                      <?= e(date('d/m/Y', strtotime((string) $absence['starts_on']))) ?>
+                      até <?= e(date('d/m/Y', strtotime((string) $absence['ends_on']))) ?>
+                    </div>
+                  <?php else: ?>
+                    <div class="fw-semibold small">Toda <?= e(mb_strtolower($days[(int) $absence['weekday']] ?? 'semana')) ?></div>
+                    <div class="small text-muted-app">
+                      <?= e(substr((string) $absence['starts_at'], 0, 5)) ?>–<?= e(substr((string) $absence['ends_at'], 0, 5)) ?>
+                      · desde <?= e(date('d/m/Y', strtotime((string) $absence['starts_on']))) ?>
+                      <?php if (!empty($absence['ends_on'])): ?> · até <?= e(date('d/m/Y', strtotime((string) $absence['ends_on']))) ?><?php endif; ?>
+                    </div>
+                  <?php endif; ?>
+                  <?php if (!empty($absence['reason'])): ?><div class="small mt-1"><?= e($absence['reason']) ?></div><?php endif; ?>
+                </div>
+                <form method="post" action="<?= e(url('/painel/equipe/' . $provider['id'] . '/ausencias/' . $absence['id'] . '/remover')) ?>">
+                  <?= Csrf::field() ?>
+                  <button class="btn btn-sm btn-link text-danger text-decoration-none" type="submit" aria-label="Remover ausência"><i class="bi bi-trash"></i></button>
+                </form>
+              </div>
+            <?php endforeach; ?>
+            <?php if ($absences === []): ?>
+              <div class="border rounded-3 p-4 text-center small text-muted-app">Nenhuma ausência recorrente ou período de férias cadastrado.</div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-4">
