@@ -3,7 +3,7 @@
   "description": "Sistema multi-tenant de agendamentos em PHP e MySQL",
   "type": "project",
   "require": {
-    "php": ">=8.2",
+    "php": ">=8.3",
     "ext-pdo": "*",
     "ext-pdo_mysql": "*",
     "ext-curl": "*",
