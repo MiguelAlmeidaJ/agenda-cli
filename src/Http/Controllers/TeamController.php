@@ -9,6 +9,7 @@ use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\TenantContext;
 use App\Core\View;
+use App\Services\EstablishmentClock;
 use App\Services\ScheduleRangeService;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -227,12 +228,18 @@ final class TeamController
             }
         }
 
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
         $blocks = $pdo->prepare(
             'SELECT id, starts_at, ends_at, reason FROM blocked_periods '
-            . 'WHERE establishment_id = :establishment AND employee_user_id = :provider AND ends_at >= NOW() '
+            . 'WHERE establishment_id = :establishment AND employee_user_id = :provider AND ends_at >= :now '
             . 'ORDER BY starts_at ASC LIMIT 30'
         );
-        $blocks->execute(['establishment' => $establishmentId, 'provider' => $providerId]);
+        $blocks->execute([
+            'establishment' => $establishmentId,
+            'provider' => $providerId,
+            'now' => $clock->sql($now),
+        ]);
 
         View::render('panel/team_schedule', [
             'title' => 'Horários de ' . $provider['name'],
