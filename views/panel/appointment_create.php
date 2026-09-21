@@ -103,7 +103,7 @@ $today = (string) $today;
               <input class="form-check-input" type="checkbox" name="recurring" value="1" id="manual-recurring">
               <label class="form-check-label fw-semibold" for="manual-recurring">Repetir este agendamento</label>
             </div>
-            <div class="small text-muted-app mb-3">Cria uma série no mesmo dia da semana, horário e profissional. Todas as ocorrências são validadas antes de salvar.</div>
+            <div class="small text-muted-app mb-3">Cria uma série no mesmo dia da semana, horário e profissional. Todas as ocorrências são validadas antes de salvar e respeitam o limite máximo de antecedência configurado.</div>
 
             <div class="row g-3 d-none" id="manual-recurrence-fields">
               <div class="col-sm-6">
