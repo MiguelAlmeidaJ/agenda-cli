@@ -654,10 +654,12 @@ final class AppointmentController
     {
         $sql = 'SELECT a.*, s.name AS service_name, s.duration_minutes, '
             . 'COALESCE(customer.name, client.name, "Cliente") AS client_name, '
-            . 'employee.name AS employee_name, e.name AS establishment_name, e.slug AS establishment_slug, e.timezone '
+            . 'employee.name AS employee_name, e.name AS establishment_name, e.slug AS establishment_slug, e.timezone, '
+            . 'series.interval_weeks AS series_interval_weeks,series.occurrences_count AS series_occurrences_count '
             . 'FROM appointments a JOIN services s ON s.id = a.service_id '
             . 'LEFT JOIN customers customer ON customer.id = a.customer_id AND customer.establishment_id = a.establishment_id '
             . 'LEFT JOIN users client ON client.id = a.client_user_id '
+            . 'LEFT JOIN appointment_series series ON series.id=a.series_id AND series.establishment_id=a.establishment_id '
             . 'JOIN users employee ON employee.id = a.employee_user_id '
             . 'JOIN establishments e ON e.id = a.establishment_id '
             . 'WHERE a.id = :id AND a.establishment_id = :establishment ';
