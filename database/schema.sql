@@ -179,6 +179,28 @@ CREATE TABLE IF NOT EXISTS provider_absences (
     CONSTRAINT chk_provider_absences_weekday CHECK (weekday IS NULL OR weekday BETWEEN 1 AND 7)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS appointment_series (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    establishment_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
+    service_id BIGINT UNSIGNED NOT NULL,
+    employee_user_id BIGINT UNSIGNED NOT NULL,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
+    frequency ENUM('weekly') NOT NULL DEFAULT 'weekly',
+    interval_weeks TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    occurrences_count SMALLINT UNSIGNED NOT NULL,
+    starts_on DATE NOT NULL,
+    starts_at TIME NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_appointment_series_tenant (establishment_id, starts_on),
+    KEY idx_appointment_series_customer (customer_id, starts_on),
+    CONSTRAINT fk_appointment_series_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_appointment_series_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_appointment_series_service FOREIGN KEY (service_id) REFERENCES services(id),
+    CONSTRAINT fk_appointment_series_employee FOREIGN KEY (employee_user_id) REFERENCES users(id),
+    CONSTRAINT fk_appointment_series_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS appointments (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     establishment_id BIGINT UNSIGNED NOT NULL,
@@ -186,6 +208,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     employee_user_id BIGINT UNSIGNED NOT NULL,
     client_user_id BIGINT UNSIGNED NULL,
     customer_id BIGINT UNSIGNED NULL,
+    series_id BIGINT UNSIGNED NULL,
+    series_position SMALLINT UNSIGNED NULL,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
     starts_at DATETIME NOT NULL,
     ends_at DATETIME NOT NULL,
@@ -201,11 +225,13 @@ CREATE TABLE IF NOT EXISTS appointments (
     KEY idx_appointments_client (client_user_id, starts_at),
     KEY idx_appointments_customer (customer_id, starts_at),
     KEY idx_appointments_attendance (establishment_id, attendance_response, starts_at, status),
+    KEY idx_appointments_series (series_id, series_position),
     CONSTRAINT fk_appointments_establishment FOREIGN KEY (establishment_id) REFERENCES establishments(id),
     CONSTRAINT fk_appointments_service FOREIGN KEY (service_id) REFERENCES services(id),
     CONSTRAINT fk_appointments_employee FOREIGN KEY (employee_user_id) REFERENCES users(id),
     CONSTRAINT fk_appointments_client FOREIGN KEY (client_user_id) REFERENCES users(id),
     CONSTRAINT fk_appointments_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+    CONSTRAINT fk_appointments_series FOREIGN KEY (series_id) REFERENCES appointment_series(id) ON DELETE SET NULL,
     CONSTRAINT fk_appointments_creator FOREIGN KEY (created_by_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
