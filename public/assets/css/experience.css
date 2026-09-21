@@ -237,3 +237,40 @@
   .establishment-map-preview { height: 230px; }
   .public-establishment-map { min-height: 260px; }
 }
+
+
+/* Busca pública */
+.public-search-card {
+  border-radius: 1rem;
+  box-shadow: 0 10px 34px rgba(15, 23, 42, .05);
+}
+.public-search-result-card { border-radius: .95rem; }
+.public-search-service-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.public-search-service-tags span,
+.distance-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: .3rem .55rem;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: #f8f9fa;
+  color: #59616d;
+  font-size: .72rem;
+  line-height: 1;
+}
+.distance-badge {
+  border-color: #d5e8dc;
+  background: #f2faf5;
+  color: #287044;
+  font-weight: 600;
+}
+.min-w-0 { min-width: 0; }
+
+@media (max-width: 575.98px) {
+  .public-search-card .card-body { padding: 1.1rem !important; }
+}
