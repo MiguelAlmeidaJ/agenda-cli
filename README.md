@@ -21,7 +21,7 @@ Sistema web multi-tenant de agendamentos feito em PHP + MySQL, com interface em 
 ## Requisitos do servidor
 
 - PHP 8.3 ou superior
-- Extensão `pdo_mysql`
+- Extensões `pdo_mysql`, `curl` e `fileinfo`
 - MySQL 8 ou superior
 - Composer 2
 - Servidor web apontando o DocumentRoot para a pasta `public/`
@@ -72,9 +72,13 @@ mysql -u usuario -p banco < database/migrations/2026_09_15_operations_v2.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_customers_and_manual_booking.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_booking_rules_and_waitlist.sql
 mysql -u usuario -p banco < database/migrations/2026_09_15_management_notifications.sql
+mysql -u usuario -p banco < database/migrations/2026_09_15_profile_details.sql
+mysql -u usuario -p banco < database/migrations/2026_09_15_cloudinary_media.sql
+mysql -u usuario -p banco < database/migrations/2026_09_15_establishment_location.sql
+mysql -u usuario -p banco < database/migrations/2026_09_21_security_hardening.sql
 ```
 
-A última migration adiciona configurações de comunicação, matches automáticos da lista de espera e a caixa de saída de notificações.
+As migrations mais recentes adicionam perfil detalhado, mídia no Cloudinary, localização geocodificada e proteção contra tentativas repetidas de login.
 
 ## Automação por cron
 
@@ -156,4 +160,4 @@ O dashboard de indicadores acompanha faturamento concluído, evolução mensal, 
 - Pagamentos e sinal no agendamento.
 - Indicadores de retenção, ticket médio e recorrência de clientes.
 - Refatoração de papéis por vínculo para suportar multiunidade completa.
-- Testes automatizados de unidade e integração.
+- Ampliar os testes automatizados para cobrir disponibilidade, isolamento de tenant, lista de espera e fluxos de agendamento.
