@@ -9,6 +9,10 @@ $statusLabels = [
     'cancelled' => 'Cancelado',
     'no_show' => 'Não compareceu',
 ];
+$attendanceLabels = [
+    'pending' => 'Presença pendente',
+    'confirmed' => 'Presença confirmada',
+];
 $canManage = in_array($role, ['owner', 'employee'], true);
 $showActions = $canManage || $role === 'client';
 ?>
@@ -41,7 +45,15 @@ $showActions = $canManage || $role === 'client';
         <?php if ($role === 'client' || $role === 'admin'): ?><td><?= e($appointment['establishment_name']) ?></td><?php endif; ?>
         <td><?= e($appointment['service_name']) ?></td><td><?= e($appointment['employee_name']) ?></td>
         <?php if ($role !== 'client'): ?><td><?= e($appointment['client_name']) ?></td><?php endif; ?>
-        <td><span class="status-pill status-<?= e($appointment['status']) ?>"><?= e($statusLabels[$appointment['status']] ?? $appointment['status']) ?></span></td>
+        <td>
+          <span class="status-pill status-<?= e($appointment['status']) ?>"><?= e($statusLabels[$appointment['status']] ?? $appointment['status']) ?></span>
+          <?php if (in_array($appointment['status'], ['pending', 'confirmed'], true)): ?>
+            <div class="small mt-1 <?= ($appointment['attendance_response'] ?? 'pending') === 'confirmed' ? 'text-success' : 'text-muted-app' ?>">
+              <i class="bi <?= ($appointment['attendance_response'] ?? 'pending') === 'confirmed' ? 'bi-person-check' : 'bi-person-clock' ?> me-1"></i>
+              <?= e($attendanceLabels[$appointment['attendance_response'] ?? 'pending'] ?? 'Presença pendente') ?>
+            </div>
+          <?php endif; ?>
+        </td>
         <td class="text-end text-nowrap">R$ <?= e(number_format((float) $appointment['price'], 2, ',', '.')) ?></td>
         <?php if ($canManage): ?>
           <td class="pe-4 text-end"><div class="dropdown">
@@ -64,7 +76,12 @@ $showActions = $canManage || $role === 'client';
         <?php elseif ($role === 'client'): ?>
           <td class="pe-4 text-end">
             <?php if (in_array($appointment['status'], ['pending', 'confirmed'], true) && !empty($appointment['is_future'])): ?>
-              <div class="d-flex justify-content-end gap-2">
+              <div class="d-flex flex-wrap justify-content-end gap-2">
+                <?php if (($appointment['attendance_response'] ?? 'pending') !== 'confirmed'): ?>
+                  <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/confirmar-presenca')) ?>">
+                    <?= Csrf::field() ?><button class="btn btn-sm btn-dark" type="submit"><i class="bi bi-person-check me-1"></i>Confirmar presença</button>
+                  </form>
+                <?php endif; ?>
                 <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/reagendar')) ?>"><i class="bi bi-calendar-event me-1"></i>Reagendar</a>
                 <form method="post" action="<?= e(url('/painel/agendamentos/' . $appointment['id'] . '/cancelar')) ?>" onsubmit="return confirm('Deseja cancelar este agendamento?')">
                   <?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit">Cancelar</button>
