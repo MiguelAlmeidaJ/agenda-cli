@@ -135,12 +135,12 @@ final class AttendanceConfirmationController
 
     private function state(array $record): string
     {
-        if (($record['attendance_response'] ?? null) === 'confirmed') {
-            return 'confirmed';
-        }
-
         if (!in_array((string) ($record['status'] ?? ''), ['pending', 'confirmed'], true)) {
             return 'unavailable';
+        }
+
+        if (($record['attendance_response'] ?? null) === 'confirmed') {
+            return 'confirmed';
         }
 
         $clock = new EstablishmentClock();
