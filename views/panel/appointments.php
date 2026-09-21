@@ -43,7 +43,12 @@ $showActions = $canManage || $role === 'client';
       <tr>
         <td class="ps-4 text-nowrap"><div class="fw-semibold"><?= e(date('d/m/Y', strtotime((string) $appointment['starts_at']))) ?></div><div class="small text-muted-app"><?= e(date('H:i', strtotime((string) $appointment['starts_at']))) ?>–<?= e(date('H:i', strtotime((string) $appointment['ends_at']))) ?></div></td>
         <?php if ($role === 'client' || $role === 'admin'): ?><td><?= e($appointment['establishment_name']) ?></td><?php endif; ?>
-        <td><?= e($appointment['service_name']) ?></td><td><?= e($appointment['employee_name']) ?></td>
+        <td>
+          <?= e($appointment['service_name']) ?>
+          <?php if (!empty($appointment['series_id'])): ?>
+            <div class="small text-muted-app mt-1"><i class="bi bi-arrow-repeat me-1"></i>Série <?= (int) $appointment['series_position'] ?>/<?= (int) $appointment['series_occurrences_count'] ?></div>
+          <?php endif; ?>
+        </td><td><?= e($appointment['employee_name']) ?></td>
         <?php if ($role !== 'client'): ?><td><?= e($appointment['client_name']) ?></td><?php endif; ?>
         <td>
           <span class="status-pill status-<?= e($appointment['status']) ?>"><?= e($statusLabels[$appointment['status']] ?? $appointment['status']) ?></span>
