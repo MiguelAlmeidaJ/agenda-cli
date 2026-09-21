@@ -11,15 +11,20 @@ final class WaitlistAutomationService
     public function scanEstablishment(int $establishmentId, int $limit = 200): array
     {
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
         $this->expireOffers($establishmentId);
 
         $stmt = $pdo->prepare(
             'SELECT w.id,w.service_id,w.preferred_employee_user_id,w.desired_date,w.time_period '
             . 'FROM waitlist_entries w JOIN services s ON s.id=w.service_id '
             . 'WHERE w.establishment_id=:establishment AND w.status="waiting" '
-            . 'AND w.desired_date>=CURDATE() AND s.active=1 ORDER BY w.desired_date,w.created_at LIMIT ' . max(1, min(500, $limit))
+            . 'AND w.desired_date>=:today AND s.active=1 ORDER BY w.desired_date,w.created_at LIMIT ' . max(1, min(500, $limit))
         );
-        $stmt->execute(['establishment' => $establishmentId]);
+        $stmt->execute([
+            'establishment' => $establishmentId,
+            'today' => $now->format('Y-m-d'),
+        ]);
 
         $availability = new AvailabilityService();
         $notifications = new NotificationService();
@@ -58,22 +63,28 @@ final class WaitlistAutomationService
             if ($notifications->queueWaitlistMatch($matchId)) $queued++;
         }
 
-        $pdo->prepare('UPDATE waitlist_matches SET status="expired" WHERE establishment_id=:establishment AND status="available" AND slot_start<NOW()')->execute(['establishment'=>$establishmentId]);
         return ['matched' => $matched, 'queued' => $queued];
     }
 
     public function expireOffers(int $establishmentId): int
     {
         $pdo = Database::connection();
+        $clock = new EstablishmentClock();
+        $now = $clock->now($pdo, $establishmentId);
+        $nowSql = $clock->sql($now);
         $pdo->beginTransaction();
 
         try {
             $stmt = $pdo->prepare(
                 'SELECT id,waitlist_entry_id FROM waitlist_matches '
-                . 'WHERE establishment_id=:establishment AND status IN ("queued","notified") '
-                . 'AND (slot_start<=NOW() OR (offer_expires_at IS NOT NULL AND offer_expires_at<=NOW())) FOR UPDATE'
+                . 'WHERE establishment_id=:establishment AND status IN ("available","queued","notified") '
+                . 'AND (slot_start<=:now_slot OR (offer_expires_at IS NOT NULL AND offer_expires_at<=:now_offer)) FOR UPDATE'
             );
-            $stmt->execute(['establishment' => $establishmentId]);
+            $stmt->execute([
+                'establishment' => $establishmentId,
+                'now_slot' => $nowSql,
+                'now_offer' => $nowSql,
+            ]);
             $expired = $stmt->fetchAll();
 
             $entryIds = [];
@@ -92,8 +103,12 @@ final class WaitlistAutomationService
             foreach (array_keys($entryIds) as $entryId) {
                 $pdo->prepare(
                     'UPDATE waitlist_entries SET status="waiting" '
-                    . 'WHERE id=:id AND establishment_id=:establishment AND status="notified" AND desired_date>=CURDATE()'
-                )->execute(['id' => $entryId, 'establishment' => $establishmentId]);
+                    . 'WHERE id=:id AND establishment_id=:establishment AND status="notified" AND desired_date>=:today'
+                )->execute([
+                    'id' => $entryId,
+                    'establishment' => $establishmentId,
+                    'today' => $now->format('Y-m-d'),
+                ]);
             }
 
             $pdo->commit();
