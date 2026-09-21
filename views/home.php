@@ -8,6 +8,21 @@
         <a class="btn btn-dark btn-lg px-4" href="#recursos">Conhecer recursos</a>
         <a class="btn btn-outline-dark btn-lg px-4" href="<?= e(url('/encontre')) ?>"><i class="bi bi-search me-2"></i>Encontrar um serviço</a>
       </div>
+      <form class="row g-2 mt-4" method="get" action="<?= e(url('/encontre')) ?>">
+        <div class="col-sm-7">
+          <div class="input-group input-group-lg">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input class="form-control" name="q" placeholder="O que você procura?">
+          </div>
+        </div>
+        <div class="col-sm-5">
+          <div class="input-group input-group-lg">
+            <span class="input-group-text bg-white"><i class="bi bi-geo-alt"></i></span>
+            <input class="form-control" name="city" placeholder="Sua cidade">
+            <button class="btn btn-dark" type="submit" aria-label="Buscar"><i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+      </form>
       <div class="d-flex flex-wrap gap-4 mt-4 small text-muted-app">
         <span><i class="bi bi-check2 me-1"></i>Agenda em tempo real</span>
         <span><i class="bi bi-check2 me-1"></i>Multiestabelecimento</span>
