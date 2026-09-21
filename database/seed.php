@@ -5,11 +5,6 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 use App\Core\Database;
-use DateInterval;
-use DateTimeImmutable;
-use DateTimeZone;
-use PDO;
-use Throwable;
 
 load_env(base_path('.env'));
 date_default_timezone_set((string) env('APP_TIMEZONE', 'America/Sao_Paulo'));
@@ -347,17 +342,23 @@ try {
         [7, '14:30', 'manicure', 5, 'confirmed', 'confirmed'],
         [8, '16:00', 'corte', 6, 'confirmed', 'pending'],
     ];
+    $clientUserByCustomer = [
+        $customers[0] => $users['client1'],
+        $customers[1] => $users['client2'],
+        $customers[2] => $users['client3'],
+    ];
     $futureAppointmentIds = [];
     foreach ($futurePlan as [$offset, $time, $serviceKey, $customerIndex, $status, $attendance]) {
         $day = nextBusinessDay($today->modify('+' . $offset . ' days'));
         $serviceId = $studioServices[$serviceKey];
+        $customerId = $customers[$customerIndex];
         $futureAppointmentIds[] = createAppointment(
             $pdo,
             $studio,
             $serviceId,
             $providerByService[$serviceId],
-            null,
-            $customers[$customerIndex],
+            $clientUserByCustomer[$customerId] ?? null,
+            $customerId,
             $users['owner'],
             $day,
             $time,
@@ -367,6 +368,34 @@ try {
             'Próximo atendimento de demonstração.',
             $attendance
         );
+    }
+
+    if ((int) $today->format('N') <= 5) {
+        $todayPlan = [
+            ['09:30', 'corte', 8, 'completed', 'confirmed'],
+            ['11:00', 'manicure', 9, 'completed', 'confirmed'],
+            ['16:00', 'escova', 10, 'confirmed', 'pending'],
+            ['17:30', 'sobrancelha', 11, 'pending', 'pending'],
+        ];
+        foreach ($todayPlan as [$time, $serviceKey, $customerIndex, $status, $attendance]) {
+            $serviceId = $studioServices[$serviceKey];
+            createAppointment(
+                $pdo,
+                $studio,
+                $serviceId,
+                $providerByService[$serviceId],
+                null,
+                $customers[$customerIndex],
+                $users['owner'],
+                $today,
+                $time,
+                $durationByService[$serviceId],
+                $status,
+                $priceByService[$serviceId],
+                'Agenda do dia para demonstração visual.',
+                $attendance
+            );
+        }
     }
 
     $seriesStart = nextWeekday($today->modify('+3 days'), 4);
@@ -480,7 +509,7 @@ try {
         'employee' => $users['camila'],
         'slot' => $matchSlot,
         'token' => hash('sha256', 'demo-waitlist-offer'),
-        'expires' => $today->modify('+1 hour')->format('Y-m-d H:i:s'),
+        'expires' => $now->modify('+30 minutes')->format('Y-m-d H:i:s'),
     ]);
 
     seedNotificationOutbox($pdo, $studio, $customers, $futureAppointmentIds, $today);
@@ -531,6 +560,29 @@ function assertDemoSchema(PDO $pdo): void
     if ($missing !== []) {
         throw new RuntimeException(
             'Banco desatualizado. Aplique todas as migrations antes do seed. Tabelas ausentes: ' . implode(', ', $missing)
+        );
+    }
+
+    $requiredColumns = [
+        ['appointments', 'attendance_response'],
+        ['appointments', 'attendance_responded_at'],
+        ['appointments', 'series_id'],
+        ['appointments', 'series_position'],
+    ];
+    $columnStmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.columns '
+        . 'WHERE table_schema=DATABASE() AND table_name=:table AND column_name=:column'
+    );
+    $missingColumns = [];
+    foreach ($requiredColumns as [$table, $column]) {
+        $columnStmt->execute(['table' => $table, 'column' => $column]);
+        if ((int) $columnStmt->fetchColumn() === 0) {
+            $missingColumns[] = $table . '.' . $column;
+        }
+    }
+    if ($missingColumns !== []) {
+        throw new RuntimeException(
+            'Banco desatualizado. Aplique todas as migrations antes do seed. Colunas ausentes: ' . implode(', ', $missingColumns)
         );
     }
 }
