@@ -30,33 +30,59 @@ $today = (new DateTimeImmutable('today'))->format('Y-m-d');
             <?php foreach ($days as $weekday => $label):
               $row = $hours[$weekday] ?? null;
               $business = $businessHours[$weekday] ?? null;
+              $businessRanges = $businessHourRanges[$weekday] ?? [];
               $mode = !$row ? 'inherit' : ((int) $row['is_off'] === 1 ? 'off' : 'custom');
               $businessText = (!$business || (int) $business['is_closed'] === 1)
                   ? 'Estabelecimento fechado'
-                  : substr((string) $business['opens_at'], 0, 5) . '–' . substr((string) $business['closes_at'], 0, 5);
-              $opens = $row['opens_at'] ?? $business['opens_at'] ?? '09:00:00';
-              $closes = $row['closes_at'] ?? $business['closes_at'] ?? '18:00:00';
+                  : implode(' / ', array_map(
+                      static fn (array $range): string => substr((string) $range['opens_at'], 0, 5) . '–' . substr((string) $range['closes_at'], 0, 5),
+                      $businessRanges
+                  ));
+              $ranges = $providerHourRanges[$weekday] ?? [];
+              if ($mode === 'custom' && $ranges === []) {
+                  $ranges = [[
+                      'opens_at' => $row['opens_at'] ? substr((string) $row['opens_at'], 0, 5) : '09:00',
+                      'closes_at' => $row['closes_at'] ? substr((string) $row['closes_at'], 0, 5) : '18:00',
+                  ]];
+              }
+              if ($ranges === []) {
+                  $ranges = $businessRanges !== [] ? $businessRanges : [['opens_at' => '09:00', 'closes_at' => '18:00']];
+              }
             ?>
-              <div class="provider-hours-row">
-                <div>
-                  <div class="fw-semibold"><?= e($label) ?></div>
-                  <div class="small text-muted-app"><?= e($businessText) ?></div>
-                </div>
-                <div>
-                  <label class="form-label small text-muted-app mb-1">Regra</label>
-                  <select class="form-select provider-mode" name="mode[<?= $weekday ?>]" data-day="<?= $weekday ?>">
-                    <option value="inherit" <?= $mode === 'inherit' ? 'selected' : '' ?>>Herdar estabelecimento</option>
-                    <option value="custom" <?= $mode === 'custom' ? 'selected' : '' ?>>Horário próprio</option>
-                    <option value="off" <?= $mode === 'off' ? 'selected' : '' ?>>Folga</option>
-                  </select>
-                </div>
-                <div class="provider-time-fields" data-time-fields="<?= $weekday ?>">
-                  <label class="form-label small text-muted-app mb-1">Início</label>
-                  <input class="form-control" type="time" name="opens[<?= $weekday ?>]" value="<?= e(substr((string) $opens, 0, 5)) ?>">
-                </div>
-                <div class="provider-time-fields" data-time-fields="<?= $weekday ?>">
-                  <label class="form-label small text-muted-app mb-1">Fim</label>
-                  <input class="form-control" type="time" name="closes[<?= $weekday ?>]" value="<?= e(substr((string) $closes, 0, 5)) ?>">
+              <div class="border rounded-3 p-3" data-provider-day="<?= $weekday ?>">
+                <div class="row g-3">
+                  <div class="col-xl-3">
+                    <div class="fw-semibold"><?= e($label) ?></div>
+                    <div class="small text-muted-app mt-1"><?= e($businessText) ?></div>
+                  </div>
+                  <div class="col-xl-3">
+                    <label class="form-label small text-muted-app mb-1">Regra</label>
+                    <select class="form-select provider-mode" name="mode[<?= $weekday ?>]" data-day="<?= $weekday ?>">
+                      <option value="inherit" <?= $mode === 'inherit' ? 'selected' : '' ?>>Herdar estabelecimento</option>
+                      <option value="custom" <?= $mode === 'custom' ? 'selected' : '' ?>>Horário próprio</option>
+                      <option value="off" <?= $mode === 'off' ? 'selected' : '' ?>>Folga</option>
+                    </select>
+                  </div>
+                  <div class="col-xl-6">
+                    <div class="d-grid gap-2" data-provider-range-list="<?= $weekday ?>">
+                      <?php foreach ($ranges as $index => $range): ?>
+                        <div class="row g-2 align-items-end" data-provider-range-row>
+                          <div class="col-5">
+                            <label class="form-label small text-muted-app mb-1">Início</label>
+                            <input class="form-control" type="time" name="ranges[<?= $weekday ?>][<?= $index ?>][opens]" value="<?= e(substr((string) $range['opens_at'], 0, 5)) ?>">
+                          </div>
+                          <div class="col-5">
+                            <label class="form-label small text-muted-app mb-1">Fim</label>
+                            <input class="form-control" type="time" name="ranges[<?= $weekday ?>][<?= $index ?>][closes]" value="<?= e(substr((string) $range['closes_at'], 0, 5)) ?>">
+                          </div>
+                          <div class="col-2">
+                            <button class="btn btn-outline-danger w-100" type="button" data-remove-provider-range><i class="bi bi-trash"></i></button>
+                          </div>
+                        </div>
+                      <?php endforeach; ?>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" type="button" data-add-provider-range="<?= $weekday ?>"><i class="bi bi-plus-lg me-1"></i>Adicionar faixa</button>
+                  </div>
                 </div>
               </div>
             <?php endforeach; ?>
@@ -126,14 +152,53 @@ $today = (new DateTimeImmutable('today'))->format('Y-m-d');
 </div>
 
 <script>
-function updateProviderHourFields() {
-  document.querySelectorAll('.provider-mode').forEach(select => {
-    const day = select.dataset.day;
-    document.querySelectorAll(`[data-time-fields="${day}"] input`).forEach(input => {
-      input.disabled = select.value !== 'custom';
+(() => {
+  function providerRangeMarkup(day, index) {
+    return `
+      <div class="row g-2 align-items-end" data-provider-range-row>
+        <div class="col-5">
+          <label class="form-label small text-muted-app mb-1">Início</label>
+          <input class="form-control" type="time" name="ranges[${day}][${index}][opens]" value="09:00">
+        </div>
+        <div class="col-5">
+          <label class="form-label small text-muted-app mb-1">Fim</label>
+          <input class="form-control" type="time" name="ranges[${day}][${index}][closes]" value="18:00">
+        </div>
+        <div class="col-2">
+          <button class="btn btn-outline-danger w-100" type="button" data-remove-provider-range><i class="bi bi-trash"></i></button>
+        </div>
+      </div>`;
+  }
+
+  function refreshProviderDay(container) {
+    const mode = container.querySelector('.provider-mode').value;
+    const enabled = mode === 'custom';
+    container.querySelectorAll('[data-provider-range-row] input, [data-remove-provider-range]').forEach(element => {
+      element.disabled = !enabled;
     });
+    container.querySelector('[data-add-provider-range]').disabled = !enabled;
+  }
+
+  document.querySelectorAll('[data-provider-day]').forEach(container => {
+    container.querySelector('.provider-mode').addEventListener('change', () => refreshProviderDay(container));
+    container.addEventListener('click', event => {
+      const remove = event.target.closest('[data-remove-provider-range]');
+      if (remove) {
+        const list = container.querySelector('[data-provider-range-list]');
+        if (list.querySelectorAll('[data-provider-range-row]').length > 1) {
+          remove.closest('[data-provider-range-row]').remove();
+        }
+        return;
+      }
+
+      const add = event.target.closest('[data-add-provider-range]');
+      if (!add) return;
+      const list = container.querySelector('[data-provider-range-list]');
+      if (list.querySelectorAll('[data-provider-range-row]').length >= 8) return;
+      list.insertAdjacentHTML('beforeend', providerRangeMarkup(container.dataset.providerDay, Date.now()));
+      refreshProviderDay(container);
+    });
+    refreshProviderDay(container);
   });
-}
-document.querySelectorAll('.provider-mode').forEach(select => select.addEventListener('change', updateProviderHourFields));
-updateProviderHourFields();
+})();
 </script>
