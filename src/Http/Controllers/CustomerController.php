@@ -22,15 +22,24 @@ final class CustomerController
         $now = $clock->sql($clock->now($pdo, $establishmentId));
         $query = trim((string) ($_GET['q'] ?? ''));
 
-        $sql = 'SELECT c.id, c.name, c.email, c.phone, c.user_id, c.created_at, '
-            . 'COUNT(a.id) AS appointment_count, '
-            . 'COALESCE(SUM(a.status = "completed"), 0) AS completed_count, '
-            . 'MAX(CASE WHEN a.status = "completed" THEN a.starts_at END) AS last_visit, '
-            . 'MIN(CASE WHEN a.status IN ("pending", "confirmed") AND a.starts_at >= :now THEN a.starts_at END) AS next_appointment '
-            . 'FROM customers c '
-            . 'LEFT JOIN appointments a ON a.customer_id = c.id AND a.establishment_id = c.establishment_id '
-            . 'WHERE c.establishment_id = :establishment ';
-        $params = ['establishment' => $establishmentId, 'now' => $now];
+        $sql = "SELECT c.id,c.name,c.email,c.phone,c.user_id,c.created_at,"
+            . "COALESCE(stats.appointment_count,0) AS appointment_count,"
+            . "COALESCE(stats.completed_count,0) AS completed_count,"
+            . "stats.last_visit,stats.next_appointment "
+            . "FROM customers c "
+            . "LEFT JOIN ("
+            . "SELECT customer_id,COUNT(*) AS appointment_count,"
+            . "SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_count,"
+            . "MAX(CASE WHEN status='completed' THEN starts_at END) AS last_visit,"
+            . "MIN(CASE WHEN status IN ('pending','confirmed') AND starts_at>=:now THEN starts_at END) AS next_appointment "
+            . "FROM appointments WHERE establishment_id=:stats_establishment GROUP BY customer_id"
+            . ") stats ON stats.customer_id=c.id "
+            . "WHERE c.establishment_id=:establishment ";
+        $params = [
+            'establishment' => $establishmentId,
+            'stats_establishment' => $establishmentId,
+            'now' => $now,
+        ];
 
         if ($query !== '') {
             $sql .= 'AND (c.name LIKE :q_name OR c.email LIKE :q_email OR c.phone LIKE :q_phone) ';
@@ -40,8 +49,8 @@ final class CustomerController
             $params['q_phone'] = $like;
         }
 
-        $sql .= 'GROUP BY c.id ORDER BY '
-            . 'CASE WHEN next_appointment IS NULL THEN 1 ELSE 0 END, next_appointment ASC, c.name ASC LIMIT 250';
+        $sql .= 'ORDER BY CASE WHEN stats.next_appointment IS NULL THEN 1 ELSE 0 END, '
+            . 'stats.next_appointment ASC,c.name ASC LIMIT 250';
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
 
@@ -142,12 +151,12 @@ final class CustomerController
         }
 
         $statsStmt = $pdo->prepare(
-            'SELECT COUNT(*) AS total, '
-            . 'COALESCE(SUM(status = "completed"), 0) AS completed, '
-            . 'COALESCE(SUM(CASE WHEN status = "completed" THEN price ELSE 0 END), 0) AS revenue, '
-            . 'MAX(CASE WHEN status = "completed" THEN starts_at END) AS last_visit, '
-            . 'MIN(CASE WHEN status IN ("pending", "confirmed") AND starts_at >= :now THEN starts_at END) AS next_appointment '
-            . 'FROM appointments WHERE establishment_id = :establishment AND customer_id = :customer'
+            "SELECT COUNT(*) AS total,"
+            . "COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),0) AS completed,"
+            . "COALESCE(SUM(CASE WHEN status='completed' THEN price ELSE 0 END),0) AS revenue,"
+            . "MAX(CASE WHEN status='completed' THEN starts_at END) AS last_visit,"
+            . "MIN(CASE WHEN status IN ('pending','confirmed') AND starts_at>=:now THEN starts_at END) AS next_appointment "
+            . "FROM appointments WHERE establishment_id=:establishment AND customer_id=:customer"
         );
         $statsStmt->execute([
             'establishment' => $establishmentId,
@@ -259,7 +268,7 @@ final class CustomerController
             return null;
         }
 
-        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email AND role = "client" AND status = "active" LIMIT 1');
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email=:email AND role='client' AND status='active' LIMIT 1");
         $stmt->execute(['email' => $email]);
         $id = $stmt->fetchColumn();
         return $id ? (int) $id : null;
