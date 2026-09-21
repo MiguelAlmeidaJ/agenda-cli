@@ -8,6 +8,8 @@ use App\Core\Auth;
 use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\View;
+use App\Services\LoginThrottleService;
+use App\Services\PasswordPolicy;
 use PDOException;
 
 final class AuthController
@@ -23,14 +25,25 @@ final class AuthController
     public function authenticate(): void
     {
         Csrf::validate($_POST['_csrf'] ?? null);
-        $email = trim((string) ($_POST['email'] ?? ''));
+        $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
+        $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+        $throttle = new LoginThrottleService();
+
+        $retryAfter = $throttle->retryAfter($email, $ip);
+        if ($retryAfter > 0) {
+            $minutes = max(1, (int) ceil($retryAfter / 60));
+            flash('error', 'Muitas tentativas de acesso. Tente novamente em cerca de ' . $minutes . ' minuto(s).');
+            redirect('/login');
+        }
 
         if ($email === '' || $password === '' || !Auth::attempt($email, $password)) {
+            $throttle->recordFailure($email, $ip);
             flash('error', 'E-mail ou senha inválidos.');
             redirect('/login');
         }
 
+        $throttle->clearEmail($email);
         redirect('/painel');
     }
 
@@ -49,8 +62,9 @@ final class AuthController
         $email = strtolower(trim((string) ($_POST['email'] ?? '')));
         $password = (string) ($_POST['password'] ?? '');
 
-        if (strlen($name) < 3 || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
-            flash('error', 'Preencha os dados corretamente. A senha precisa ter ao menos 8 caracteres.');
+        $passwordErrors = (new PasswordPolicy())->errors($password);
+        if (strlen($name) < 3 || !filter_var($email, FILTER_VALIDATE_EMAIL) || $passwordErrors !== []) {
+            flash('error', 'Preencha os dados corretamente. ' . ($passwordErrors[0] ?? 'Revise os dados informados.'));
             redirect('/cadastro');
         }
 
