@@ -1,7 +1,7 @@
 <?php
 use App\Core\Csrf;
 
-$today = date('Y-m-d');
+$today = (string) $today;
 ?>
 <section class="page-header">
   <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
