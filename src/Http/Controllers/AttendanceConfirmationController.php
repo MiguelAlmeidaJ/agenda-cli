@@ -139,17 +139,21 @@ final class AttendanceConfirmationController
             return 'unavailable';
         }
 
-        if (($record['attendance_response'] ?? null) === 'confirmed') {
-            return 'confirmed';
-        }
-
         $clock = new EstablishmentClock();
         $timezone = (string) ($record['timezone'] ?? env('APP_TIMEZONE', 'America/Sao_Paulo'));
         $now = $clock->inTimezone($timezone);
         $startsAt = $clock->inTimezone($timezone, (string) $record['starts_at']);
         $expiresAt = $clock->inTimezone($timezone, (string) $record['expires_at']);
 
-        if ($startsAt <= $now || $expiresAt <= $now || !empty($record['used_at'])) {
+        if ($startsAt <= $now || $expiresAt <= $now) {
+            return 'expired';
+        }
+
+        if (($record['attendance_response'] ?? null) === 'confirmed') {
+            return 'confirmed';
+        }
+
+        if (!empty($record['used_at'])) {
             return 'expired';
         }
 
