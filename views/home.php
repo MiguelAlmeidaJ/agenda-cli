@@ -1,164 +1,261 @@
-<section class="sales-hero">
+<section class="home-hero">
   <div class="row align-items-center g-5">
+    <div class="col-lg-6">
+      <span class="home-kicker mb-3"><i class="bi bi-stars"></i> Agenda online para negócios de serviços</span>
+      <h1 class="home-hero-title fw-bold mb-4">Sua agenda trabalha mesmo enquanto você está atendendo.</h1>
+      <p class="home-hero-copy mb-4">Organize serviços, profissionais e horários em um só lugar. O AgendaCli calcula a disponibilidade, recebe agendamentos e reduz o trabalho repetitivo da sua equipe.</p>
+
+      <div class="d-flex flex-column flex-sm-row gap-2 mb-4">
+        <a class="btn btn-primary btn-lg px-4 home-primary-btn" href="<?= e(url('/cadastro')) ?>">Começar agora <i class="bi bi-arrow-right ms-2"></i></a>
+        <a class="btn btn-outline-dark btn-lg px-4" href="#recursos">Ver como funciona</a>
+      </div>
+
+      <div class="home-benefits">
+        <span><i class="bi bi-check-circle-fill"></i> Disponibilidade em tempo real</span>
+        <span><i class="bi bi-check-circle-fill"></i> Regras por profissional</span>
+        <span><i class="bi bi-check-circle-fill"></i> Agendamento 24 horas</span>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="home-product-stage">
+        <div class="home-product-window">
+          <div class="home-window-bar">
+            <div class="home-window-dots"><span></span><span></span><span></span></div>
+            <div class="home-window-label"><i class="bi bi-calendar2-week me-2"></i>Agenda de hoje</div>
+            <span class="home-live-pill"><span></span> Atualizada</span>
+          </div>
+
+          <div class="home-product-content">
+            <div class="home-product-sidebar">
+              <div class="home-sidebar-logo"><i class="bi bi-calendar2-check"></i></div>
+              <span class="active"><i class="bi bi-grid"></i></span>
+              <span><i class="bi bi-calendar3"></i></span>
+              <span><i class="bi bi-people"></i></span>
+              <span><i class="bi bi-bar-chart"></i></span>
+            </div>
+
+            <div class="home-product-main">
+              <div class="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                  <span class="small text-muted-app">Quinta-feira, 24</span>
+                  <h2 class="h5 fw-bold mb-0 mt-1">Agenda do Studio Aurora</h2>
+                </div>
+                <span class="home-count-badge">8 horários</span>
+              </div>
+
+              <div class="home-appointment-list">
+                <div class="home-appointment">
+                  <div class="home-appointment-time">09:00</div>
+                  <div class="home-appointment-avatar">BR</div>
+                  <div class="home-appointment-copy">
+                    <strong>Beatriz Lima</strong>
+                    <span>Corte & finalização · Rafael</span>
+                  </div>
+                  <span class="home-status home-status-confirmed"><i class="bi bi-check2"></i> Confirmado</span>
+                </div>
+
+                <div class="home-appointment">
+                  <div class="home-appointment-time">10:30</div>
+                  <div class="home-appointment-avatar">AC</div>
+                  <div class="home-appointment-copy">
+                    <strong>Ana Clara</strong>
+                    <span>Manicure · Camila</span>
+                  </div>
+                  <span class="home-status home-status-presence"><i class="bi bi-person-check"></i> Presença</span>
+                </div>
+
+                <div class="home-appointment">
+                  <div class="home-appointment-time">14:00</div>
+                  <div class="home-appointment-avatar">JP</div>
+                  <div class="home-appointment-copy">
+                    <strong>João Pedro</strong>
+                    <span>Hidratação premium · Rafael</span>
+                  </div>
+                  <span class="home-status home-status-pending"><i class="bi bi-clock"></i> Pendente</span>
+                </div>
+              </div>
+
+              <div class="row g-2 mt-3">
+                <div class="col-4"><div class="home-mini-metric"><strong>8</strong><span>agendamentos</span></div></div>
+                <div class="col-4"><div class="home-mini-metric"><strong>6</strong><span>confirmados</span></div></div>
+                <div class="col-4"><div class="home-mini-metric"><strong>2</strong><span>pendentes</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-floating-card home-floating-card-slots">
+          <span class="home-floating-icon"><i class="bi bi-clock-history"></i></span>
+          <div><strong>Horários calculados</strong><small>sem conflito de agenda</small></div>
+        </div>
+
+        <div class="home-floating-card home-floating-card-auto">
+          <span class="home-floating-icon"><i class="bi bi-arrow-repeat"></i></span>
+          <div><strong>Recorrência ativa</strong><small>4 atendimentos criados</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="home-discovery">
+  <div class="home-discovery-card">
+    <div class="home-discovery-copy">
+      <span class="home-discovery-icon"><i class="bi bi-search"></i></span>
+      <div>
+        <strong>Você é cliente e quer marcar um horário?</strong>
+        <span>Encontre estabelecimentos e veja horários realmente disponíveis.</span>
+      </div>
+    </div>
+
+    <form class="home-search-form" method="get" action="<?= e(url('/encontre')) ?>">
+      <div class="home-search-field">
+        <i class="bi bi-search"></i>
+        <input name="q" placeholder="Serviço ou estabelecimento" aria-label="Serviço ou estabelecimento">
+      </div>
+      <div class="home-search-field">
+        <i class="bi bi-geo-alt"></i>
+        <input name="city" placeholder="Cidade" aria-label="Cidade">
+      </div>
+      <button class="btn btn-dark" type="submit">Buscar <i class="bi bi-arrow-right ms-1"></i></button>
+    </form>
+  </div>
+</section>
+
+<section class="home-section" id="recursos">
+  <div class="row align-items-end g-4 mb-4">
     <div class="col-lg-7">
-      <span class="eyebrow mb-3">Agenda online para negócios de serviços</span>
-      <h1 class="display-4 fw-bold mb-4">Sua agenda organizada. Seus clientes agendando sem depender de mensagem.</h1>
-      <p class="lead text-muted-app mb-4">Centralize serviços, profissionais, horários e agendamentos em um sistema simples para sua equipe e fácil para seus clientes.</p>
-      <div class="d-flex flex-column flex-sm-row gap-2">
-        <a class="btn btn-dark btn-lg px-4" href="#recursos">Conhecer recursos</a>
-        <a class="btn btn-outline-dark btn-lg px-4" href="<?= e(url('/encontre')) ?>"><i class="bi bi-search me-2"></i>Encontrar um serviço</a>
-      </div>
-      <form class="row g-2 mt-4" method="get" action="<?= e(url('/encontre')) ?>">
-        <div class="col-sm-7">
-          <div class="input-group input-group-lg">
-            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-            <input class="form-control" name="q" placeholder="O que você procura?">
-          </div>
-        </div>
-        <div class="col-sm-5">
-          <div class="input-group input-group-lg">
-            <span class="input-group-text bg-white"><i class="bi bi-geo-alt"></i></span>
-            <input class="form-control" name="city" placeholder="Sua cidade">
-            <button class="btn btn-dark" type="submit" aria-label="Buscar"><i class="bi bi-arrow-right"></i></button>
-          </div>
-        </div>
-      </form>
-      <div class="d-flex flex-wrap gap-4 mt-4 small text-muted-app">
-        <span><i class="bi bi-check2 me-1"></i>Agenda em tempo real</span>
-        <span><i class="bi bi-check2 me-1"></i>Multiestabelecimento</span>
-        <span><i class="bi bi-check2 me-1"></i>Acesso por perfil</span>
-      </div>
+      <span class="home-section-kicker">Menos trabalho manual</span>
+      <h2 class="home-section-title fw-bold mb-2">Você configura as regras. O AgendaCli cuida do repetitivo.</h2>
+      <p class="text-muted-app mb-0">A rotina fica organizada sem exigir que alguém passe o dia alimentando o sistema.</p>
+    </div>
+    <div class="col-lg-5 text-lg-end">
+      <a class="home-text-link" href="<?= e(url('/cadastro')) ?>">Criar minha conta <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-calendar2-week"></i></div>
+        <span class="home-feature-number">01</span>
+        <h3>Agenda inteligente</h3>
+        <p>Jornada, duração do serviço, bloqueios, férias e outros agendamentos entram automaticamente no cálculo de disponibilidade.</p>
+      </article>
     </div>
 
-    <div class="col-lg-5">
-      <div class="product-preview">
-        <div class="preview-topbar d-flex align-items-center justify-content-between">
-          <div>
-            <div class="small text-muted-app">Hoje</div>
-            <div class="fw-semibold">Agenda do estabelecimento</div>
-          </div>
-          <span class="badge text-bg-light border">8 agendamentos</span>
-        </div>
-        <div class="preview-body">
-          <div class="preview-appointment">
-            <div class="preview-time">09:00</div>
-            <div>
-              <div class="fw-semibold">Corte masculino</div>
-              <div class="small text-muted-app">Rafael · 45 min</div>
-            </div>
-            <i class="bi bi-check-circle ms-auto text-success"></i>
-          </div>
-          <div class="preview-appointment">
-            <div class="preview-time">10:30</div>
-            <div>
-              <div class="fw-semibold">Manicure</div>
-              <div class="small text-muted-app">Camila · 60 min</div>
-            </div>
-            <i class="bi bi-check-circle ms-auto text-success"></i>
-          </div>
-          <div class="preview-appointment">
-            <div class="preview-time">13:00</div>
-            <div>
-              <div class="fw-semibold">Consulta</div>
-              <div class="small text-muted-app">Mariana · 30 min</div>
-            </div>
-            <i class="bi bi-clock ms-auto text-muted-app"></i>
-          </div>
-          <div class="preview-summary row g-2 mt-2">
-            <div class="col-6"><div class="preview-stat"><strong>6</strong><span>confirmados</span></div></div>
-            <div class="col-6"><div class="preview-stat"><strong>2</strong><span>pendentes</span></div></div>
-          </div>
-        </div>
-      </div>
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-phone"></i></div>
+        <span class="home-feature-number">02</span>
+        <h3>Reserva online</h3>
+        <p>O cliente encontra o serviço, escolhe um profissional e agenda apenas nos horários realmente livres.</p>
+      </article>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-arrow-repeat"></i></div>
+        <span class="home-feature-number">03</span>
+        <h3>Agendamentos recorrentes</h3>
+        <p>Crie séries semanais em poucos cliques e valide todas as ocorrências antes de salvar.</p>
+      </article>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-person-check"></i></div>
+        <span class="home-feature-number">04</span>
+        <h3>Confirmação de presença</h3>
+        <p>O cliente confirma pelo próprio painel ou por um link seguro, e a equipe enxerga a resposta no agendamento.</p>
+      </article>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-hourglass-split"></i></div>
+        <span class="home-feature-number">05</span>
+        <h3>Lista de espera</h3>
+        <p>Quando surgir uma oportunidade, o sistema prepara uma oferta e revalida o horário antes da conversão.</p>
+      </article>
+    </div>
+
+    <div class="col-md-6 col-lg-4">
+      <article class="home-feature-card h-100">
+        <div class="home-feature-icon"><i class="bi bi-people"></i></div>
+        <span class="home-feature-number">06</span>
+        <h3>Clientes e histórico</h3>
+        <p>Centralize dados, últimos atendimentos, próximos horários e histórico para entender melhor sua base de clientes.</p>
+      </article>
     </div>
   </div>
 </section>
 
-<section class="sales-section" id="recursos">
-  <div class="section-heading">
-    <span class="eyebrow mb-3">Tudo em um só lugar</span>
-    <h2 class="fw-bold">Menos tempo organizando a agenda. Mais tempo atendendo.</h2>
-    <p class="text-muted-app">O Agenda CLI organiza a rotina do estabelecimento sem adicionar complexidade à operação.</p>
-  </div>
-
-  <div class="row g-3 mt-2">
-    <div class="col-md-6 col-lg-3">
-      <div class="feature-card h-100">
-        <div class="icon-box mb-4"><i class="bi bi-calendar2-week"></i></div>
-        <h3 class="h5">Agenda centralizada</h3>
-        <p class="text-muted-app mb-0">Visualize os horários do negócio e acompanhe os atendimentos em um único painel.</p>
-      </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-      <div class="feature-card h-100">
-        <div class="icon-box mb-4"><i class="bi bi-scissors"></i></div>
-        <h3 class="h5">Serviços e duração</h3>
-        <p class="text-muted-app mb-0">Cadastre serviços, valores e tempo necessário para cada atendimento.</p>
-      </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-      <div class="feature-card h-100">
-        <div class="icon-box mb-4"><i class="bi bi-people"></i></div>
-        <h3 class="h5">Equipe organizada</h3>
-        <p class="text-muted-app mb-0">Funcionários ficam vinculados ao estabelecimento e aos serviços que realizam.</p>
-      </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-      <div class="feature-card h-100">
-        <div class="icon-box mb-4"><i class="bi bi-phone"></i></div>
-        <h3 class="h5">Reserva online</h3>
-        <p class="text-muted-app mb-0">O cliente vê apenas horários realmente disponíveis e agenda de forma simples.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="sales-section border-top" id="como-funciona">
+<section class="home-section home-flow-section" id="como-funciona">
   <div class="row g-5 align-items-center">
     <div class="col-lg-5">
-      <span class="eyebrow mb-3">Como funciona</span>
-      <h2 class="fw-bold mb-3">Do cadastro do serviço ao horário reservado.</h2>
-      <p class="text-muted-app mb-0">A disponibilidade é montada a partir dos horários do estabelecimento, duração dos serviços, profissionais e agendamentos já existentes.</p>
+      <span class="home-section-kicker">Fluxo simples</span>
+      <h2 class="home-section-title fw-bold mb-3">Da configuração ao agendamento sem troca interminável de mensagens.</h2>
+      <p class="text-muted-app mb-4">A disponibilidade nasce das regras reais do estabelecimento. O cliente vê somente aquilo que pode ser reservado.</p>
+      <a class="btn btn-outline-dark" href="<?= e(url('/cadastro')) ?>">Configurar meu estabelecimento</a>
     </div>
+
     <div class="col-lg-7">
-      <div class="steps-list">
-        <div class="step-item">
-          <span class="step-number">01</span>
-          <div><h3 class="h6 mb-1">Configure o estabelecimento</h3><p class="text-muted-app mb-0">Defina serviços, equipe e horário de funcionamento.</p></div>
+      <div class="home-flow">
+        <div class="home-flow-item">
+          <span>1</span>
+          <div>
+            <strong>Cadastre serviços, equipe e funcionamento</strong>
+            <p>Defina duração, preço, profissionais e as faixas de atendimento de cada dia.</p>
+          </div>
         </div>
-        <div class="step-item">
-          <span class="step-number">02</span>
-          <div><h3 class="h6 mb-1">O cliente escolhe o melhor horário</h3><p class="text-muted-app mb-0">Serviço, profissional e disponibilidade ficam acessíveis online.</p></div>
+        <div class="home-flow-line"></div>
+        <div class="home-flow-item">
+          <span>2</span>
+          <div>
+            <strong>Compartilhe a página do estabelecimento</strong>
+            <p>Seu cliente encontra serviços, profissionais e horários disponíveis em uma experiência simples.</p>
+          </div>
         </div>
-        <div class="step-item">
-          <span class="step-number">03</span>
-          <div><h3 class="h6 mb-1">Sua equipe acompanha pelo painel</h3><p class="text-muted-app mb-0">Cada perfil acessa somente o que precisa para trabalhar.</p></div>
+        <div class="home-flow-line"></div>
+        <div class="home-flow-item">
+          <span>3</span>
+          <div>
+            <strong>Acompanhe tudo pelo painel</strong>
+            <p>Agenda, clientes, recorrências, lista de espera e indicadores ficam organizados no mesmo lugar.</p>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="sales-section">
-  <div class="client-callout">
-    <div class="row align-items-center g-4">
-      <div class="col-lg-8">
-        <span class="eyebrow eyebrow-light mb-3">Para quem quer agendar</span>
-        <h2 class="fw-bold mb-2">Procurando um serviço?</h2>
-        <p class="mb-0 text-white-50">Veja estabelecimentos disponíveis, compare serviços e reserve seu horário online.</p>
+<section class="home-client-section">
+  <div class="home-client-card">
+    <div class="home-client-decoration home-client-decoration-one"></div>
+    <div class="home-client-decoration home-client-decoration-two"></div>
+    <div class="row align-items-center g-4 position-relative">
+      <div class="col-lg-7">
+        <span class="home-dark-kicker"><i class="bi bi-compass"></i> Para quem quer agendar</span>
+        <h2 class="fw-bold mb-2">Encontre um serviço e escolha o melhor horário.</h2>
+        <p class="mb-0">Pesquise estabelecimentos, compare serviços e veja disponibilidade sem precisar perguntar por mensagem.</p>
       </div>
-      <div class="col-lg-4 text-lg-end">
-        <a class="btn btn-light btn-lg px-4" href="<?= e(url('/encontre')) ?>">Encontre um serviço <i class="bi bi-arrow-right ms-2"></i></a>
+      <div class="col-lg-5 text-lg-end">
+        <a class="btn btn-light btn-lg px-4" href="<?= e(url('/encontre')) ?>">Encontrar um serviço <i class="bi bi-arrow-right ms-2"></i></a>
       </div>
     </div>
   </div>
 </section>
 
-<section class="sales-section pt-0">
-  <div class="text-center py-5">
-    <span class="eyebrow mb-3">Uma rotina mais simples</span>
-    <h2 class="fw-bold mb-3">Sua agenda não precisa depender de planilha e troca de mensagens.</h2>
-    <p class="text-muted-app mx-auto mb-4 closing-copy">Centralize a operação e deixe o cliente encontrar horários disponíveis sem interromper o atendimento.</p>
-    <a class="btn btn-dark btn-lg px-4" href="<?= e(url('/login')) ?>">Acessar a plataforma</a>
+<section class="home-final-cta">
+  <div class="home-final-inner">
+    <span class="home-section-kicker">Uma rotina mais leve</span>
+    <h2 class="fw-bold">Organize a agenda sem criar mais trabalho para sua equipe.</h2>
+    <p>Comece configurando o estabelecimento e deixe as regras do sistema cuidarem da disponibilidade.</p>
+    <div class="d-flex flex-column flex-sm-row justify-content-center gap-2">
+      <a class="btn btn-primary btn-lg px-4 home-primary-btn" href="<?= e(url('/cadastro')) ?>">Criar conta</a>
+      <a class="btn btn-outline-dark btn-lg px-4" href="<?= e(url('/login')) ?>">Já tenho uma conta</a>
+    </div>
   </div>
 </section>
